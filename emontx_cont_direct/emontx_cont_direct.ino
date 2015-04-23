@@ -1,9 +1,8 @@
 //      Code by Robin Emley (calypso_rae on Open Energy Monitor Forum) - September 2013
 //      Updated November 2013 to include analog and LED pins for the emonTx V3 by Glyn Hudson
-//
 //      Updated July 2014 to send readings via MQTT by Ben Jones
-//
 //      The interrupt-based kernel for this sketch was kindly provided by Jorg Becker.
+//      Adapted April 2014 to suit local setup
 
 #include <avr/wdt.h>
 #include <Arduino.h>         // may not be needed, but it's probably a good idea to include this
@@ -157,7 +156,6 @@ unsigned int cycleCount = 0;
 // --> (100A / 0.05A) / 33 Ohms = 60.606
 // Ch 2,4 use 180 ohm (:
 // --> (100A / 0.05A) / 180 Ohms = 11.111
-
 
 // Original=2.43936
 // 2000W heater => 1778, new 2.74394
