@@ -25,7 +25,7 @@ http://arduino.esp8266.com/package_esp8266com_index.json
 Libraries
 
 Arduino Library for Dallas Temperature ICs
-https://github.com/milesburton/Arduino-Temperature-Control-Library
+https://github.com/milesburton/Arduino-Temperature-Control-Library/archive/master.zip
 
 MQTT pubsubclient
 https://github.com/Imroy/pubsubclient/archive/master.zip
