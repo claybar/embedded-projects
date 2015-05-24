@@ -26,8 +26,8 @@ Network config required:
 MQTT messages
   MQTT messages are set to the topic `/ESP8266_DEVICEID/temperature/instant/ONEWIREID.c` with a string 
   payload of the temperature where:
-    - `DEVICEID` is the unique (hopefully) number of the ESP module
-    - `ONEWIREID` is the unique one-wire serial number assigned by Maxim
+  - `DEVICEID` is the unique (hopefully) number of the ESP module
+  - `ONEWIREID` is the unique one-wire serial number assigned by Maxim
 
 Temperature sampling and transmission periods  (NOT YET FULLY IMPLEMENTED)
   The sampling and transmission periods can be set independently.  At each transmission the average of all 
