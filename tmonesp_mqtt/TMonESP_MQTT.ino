@@ -7,12 +7,12 @@ Samples the temperature of up to 4 DS18B20 sensors and reports using MQTT over W
 Buildpack required:
   - Arduino >1.6.4 http://www.arduino.cc/en/Main/Software
   - ESP build environment https://github.com/esp8266/Arduino
-      Install via Board Manager by following the instructions in main README.md 
+      Install via Board Manager by following the instructions in main README.md
       using http://arduino.esp8266.com/package_esp8266com_index.json
 
 Libraries required:
   - DallasTemperature https://github.com/milesburton/Arduino-Temperature-Control-Library/archive/master.zip
-  - PubSubClient (MQTT) https://github.com/Imroy/pubsubclient/archive/master.zip
+  - PubSubClient (MQTT) https://github.com/Imroy/pubsubclient https://github.com/Imroy/pubsubclient/archive/master.zip
 
 Hardware required:
   - ESP8266 module
@@ -21,20 +21,20 @@ Hardware required:
 
 Network config required:
   - Edit Secrets.h with network credentials and IP assignments.
-  Network and MQTT status is monitored indirectly by counting the number of sequential MQTT transmission 
-  failures.  If this count exceeds a threshold (TX_FAIL_LIMIT) the processor is rebooted. 
+  Network and MQTT status is monitored indirectly by counting the number of sequential MQTT transmission
+  failures.  If this count exceeds a threshold (TX_FAIL_LIMIT) the processor is rebooted.
 
 MQTT messages
-  MQTT messages are set to the topic "/ESP8266_DEVICEID/temperature/instant/ONEWIREID.c" with a string 
+  MQTT messages are set to the topic "/ESP8266_DEVICEID/temperature/instant/ONEWIREID.c" with a string
   payload of the temperature where:
     - DEVICEID is the unique (hopefully) number of the ESP module
     - ONEWIREID is the unique one-wire serial number assigned by Maxim
 
 Temperature sampling and transmission periods  (NOT YET FULLY IMPLEMENTED)
-  The sampling and transmission periods can be set independently.  At each transmission the average of all 
+  The sampling and transmission periods can be set independently.  At each transmission the average of all
   temperature samples taken within the transmission is calculated and sent.  To disable averaging over the
   time period, set SAMPLE_PERIOD = MQTT_TX_PERIOD
-  
+
 TODO:
   - Implement temperature averaging using an accumulator.  Need to make sure fresh sample is sent when
     sample and tx period are equal.  If the tx fires just before the sample ticker there will be a delay
@@ -75,22 +75,59 @@ bool TriggerSample;
 Ticker Tx;
 bool TriggerTx;
 
-// Counter for failed transmissions.  Used to reset processor after repeated failures.
+// Counters for tracking failed transmissions.  Used to reset processor after repeated failures.
 int txFailCount;
+int txFailCountTotal;
 
 PubSubClient client(MQTTServer);
 
 String DeviceName = "ESP8266_" + String(ESP.getChipId());
 
-void callback(const MQTT::Publish& pub) {
-  // handle message arrived
+// Process and repond to any MQTT requests
+void callback(const MQTT::Publish& pub)
+{
+  String mqttTopicBase = "/" + DeviceName + "/status/";
+  
+  Serial.println("MQTT: message received: " + pub.topic() + " => " + pub.payload_string());
+    
+  if (pub.payload_string() == "status")
+  {
+    Serial.println("MQTT: Sending status");
+    // Send a bunch of MQTT messages containing status
+    IPAddress ip = WiFi.localIP();
+    client.publish(mqttTopicBase + "ip", String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]));
+    client.publish(mqttTopicBase + "freeheap", String(ESP.getFreeHeap()));
+    client.publish(mqttTopicBase + "txfailcount", String(txFailCountTotal));
+    client.publish(mqttTopicBase + "sensorcount", String(sensorCount));
+    client.publish(mqttTopicBase + "sensorperiod", String(SAMPLE_PERIOD));
+    client.publish(mqttTopicBase + "txperiod", String(MQTT_TX_PERIOD));
+  }
+  else if (pub.payload_string() == "reboot")
+  {
+    Serial.println("MQTT: Rebooting");
+    client.publish(mqttTopicBase + "rebooting", "now");
+    ESP.reset();
+  }
+  else
+  {
+    Serial.println("MQTT: Unrecognised message received: " + pub.topic() + " => " + pub.payload_string());
+    client.publish(mqttTopicBase + "unknownrequest", pub.topic());
+  }
 }
 
 // Helper functions for state machine triggers
-void SetSampleTrigger() { TriggerSample = true; }
-void ResetSampleTrigger() { TriggerSample = false; }
-void SetTxTrigger() { TriggerTx = true; }
-void ResetTxTrigger() { TriggerTx = false; }
+void SetSampleTrigger() {
+  TriggerSample = true;
+}
+void ResetSampleTrigger() {
+  TriggerSample = false;
+}
+void SetTxTrigger() {
+  TriggerTx = true;
+}
+void ResetTxTrigger() {
+  TriggerTx = false;
+}
 
 void wifiConnect()
 {
@@ -98,16 +135,14 @@ void wifiConnect()
   WiFi.begin(AP_SSID, AP_PASSWORD);
   while (WiFi.status() != WL_CONNECTED)
   {
-    delay(1000);
+    delay(500);
     Serial.print(".");
   }
-  
-  Serial.println("");
-  Serial.println("WiFi connected");
+  Serial.println("SUCCESS");
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
-  Serial.print("Diagnostic info:");
-  WiFi.printDiag(Serial);
+  //Serial.print("Diagnostic info:");
+  //WiFi.printDiag(Serial);
 }
 
 void setup(void)
@@ -116,31 +151,35 @@ void setup(void)
   Serial.begin(115200);
   Serial.println("TMonESP_MQTT - Temperature via MQTT over WiFi from an ESP8266 module");
   Serial.println("https://github.com/claybar/home-automation/");
-  
-  // MQTT setup
+
   client.set_callback(callback);
-  // Set up subscriptions
-  //client.subscribe("testingIn");
   
   wifiConnect();
 
-  Serial.print("Device Name: ");
-  Serial.println(DeviceName);
+  // MQTT setup
+  Serial.print("MQTT connecting...");
+  client.connect(DeviceName);
+  if (client.connected())
+    Serial.println("SUCCESS");
+  else
+    Serial.println("FAILED");
+  // Set up subscriptions
+  client.subscribe("/" + DeviceName + "/request");
   
+  Serial.print("Device Name: " + DeviceName);
+
   // Start up the dallas temperature library
   sensors.begin();
-
-  // locate devices on the bus
   Serial.print("Locating devices...");
   sensorCount = sensors.getDeviceCount();
   Serial.print("Found ");
   Serial.print(sensorCount, DEC);
   Serial.println(" devices.");
-
-  // report parasite power requirements
-  Serial.print("Parasite power is: "); 
-  if (sensors.isParasitePowerMode()) Serial.println("ON");
-  else Serial.println("OFF");
+  Serial.print("Parasite power is: ");
+  if (sensors.isParasitePowerMode())
+    Serial.println("ON");
+  else
+    Serial.println("OFF");
 
   for (int i = 0; i < sensorCount; i++)
   {
@@ -151,21 +190,13 @@ void setup(void)
     }
     else
     {
-      // show the addresses we found on the bus
-      Serial.print("Device ");
-      Serial.print(i);
-      Serial.print(" Address: ");
-      printAddress(sensorAddresses[i]);
-      Serial.println();
-
-      // set the resolution to 9 bit
       sensors.setResolution(sensorAddresses[i], TEMPERATURE_PRECISION);
 
-      Serial.print("Device ");
-      Serial.print(i);
+      // show the addresses we found on the bus
+      Serial.print("Device " + String(i) + " Address: ");
+      printAddress(sensorAddresses[i]);
       Serial.print(" Resolution: ");
-      Serial.print(sensors.getResolution(sensorAddresses[i]), DEC); 
-      Serial.println();
+      Serial.println(sensors.getResolution(sensorAddresses[i]), DEC);
     }
   }
 
@@ -181,12 +212,9 @@ String addressAsString(DeviceAddress deviceAddress)
   {
     // zero pad the address if necessary
     if (deviceAddress[i] < 16)
-    {
       s = s + String("0");
-    }
     s = s + String(deviceAddress[i], HEX);
   }
-  
   return s;
 }
 
@@ -196,7 +224,8 @@ void printAddress(DeviceAddress deviceAddress)
   for (uint8_t i = 0; i < 8; i++)
   {
     // zero pad the address if necessary
-    if (deviceAddress[i] < 16) Serial.print("0");
+    if (deviceAddress[i] < 16)
+      Serial.print("0");
     Serial.print(deviceAddress[i], HEX);
   }
 }
@@ -222,7 +251,7 @@ void printResolution(DeviceAddress deviceAddress)
 {
   Serial.print("Resolution: ");
   Serial.print(sensors.getResolution(deviceAddress));
-  Serial.println();    
+  Serial.println();
 }
 
 // main function to print information about a device
@@ -236,13 +265,13 @@ void printData(DeviceAddress deviceAddress)
 }
 
 void loop(void)
-{ 
+{
   if (TriggerSample)
   {
     ResetSampleTrigger();
     Serial.println("Trigger: Sensor sampling");
-    
-    // call sensors.requestTemperatures() to issue a global temperature 
+
+    // call sensors.requestTemperatures() to issue a global temperature
     // request to all devices on the bus
     Serial.print("Requesting temperatures...");
     sensors.requestTemperatures();
@@ -255,26 +284,12 @@ void loop(void)
       printData(sensorAddresses[i]);
     }
   }
-  
+
   if (TriggerTx)
   {
     ResetTxTrigger();
     Serial.println("Trigger: Transmit");
-    
-    if (!client.connected())
-    {
-      Serial.print("MQTT connecting...");
-      client.connect(DeviceName);
-      if (client.connected())
-      {
-        Serial.println("SUCCESS");
-      }
-      else
-      {
-        Serial.println("FAILED");
-      }
-    }
-    
+
     // Send messages via MQTT
     if (client.connected())
     {
@@ -294,17 +309,19 @@ void loop(void)
     else
     {
       txFailCount++;
+      txFailCountTotal++;
       Serial.print("MQTT connect failed. Count = ");
       Serial.println(txFailCount);
     }
   }
-  
+
   if (txFailCount > TX_FAIL_LIMIT)
   {
     // Something is preventing data transmission.  Reset processor to try again
     Serial.println("TX fail limit reached, resetting processor.");
     ESP.reset();
   }
-  
+
+  // Process MQTT
   client.loop();
 }
