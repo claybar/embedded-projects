@@ -30,3 +30,16 @@ https://github.com/milesburton/Arduino-Temperature-Control-Library/archive/maste
 MQTT pubsubclient
 https://github.com/Imroy/pubsubclient/archive/master.zip
 
+## Lighting Control
+
+Libraries
+
+LED Abstraction
+http://arduino-info.wikispaces.com/HAL-LibrariesUpdates
+
+Finite State Machine
+http://arduino-info.wikispaces.com/HAL-LibrariesUpdates
+
+## Notes
+PWM not os flash on pins 5 & 6 due to timer usage.
+
