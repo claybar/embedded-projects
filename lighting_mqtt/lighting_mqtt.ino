@@ -9,23 +9,26 @@ States:
 - Motion (LEDs on bright)
 - Alarm (LEDs flashing)
 
-Transitions triggered by clock:
+Transitions clock:
 Daytime -> Dusk
 Dusk -> Night
 Night -> Dawn
 Dawn -> Daytime
 
+Within states [Dusk, Night, Dawn] motion
 
 
 
 */
 
-#include <LED.h>
+//#include <LED.h>
+#include <LEDFader.h>
+#include <Curve.h>
 
 const int activityLedPin = 13;
-const int motionSensorAPin = 2;
-const int motionSensorBPin = 4;
-const int lightingPin = 4;
+const int motionSensorAPin = 7;
+const int motionSensorBPin = 6;
+const int lightingPin = 9;
 
 int lightingLevelAmbient = 10; // percentage
 int lightingLevelBright = 50;  // percentage
@@ -35,7 +38,11 @@ int motionBState = 0;
 int previousMotionAState = 0;
 int previousMotionBState = 0;
 
-LED activityLed = LED(activityLedPin);
+//LED activityLed = LED(activityLedPin);
+//LED lightingLed = LED(lightingPin);
+//LEDFader activityLed = LEDFader(activityLedPin);
+
+LEDFader lightingLed = LEDFader(lightingPin);
 
 void setup() {
   pinMode(motionSensorAPin, INPUT);
@@ -44,6 +51,9 @@ void setup() {
   //pinMode(activityLedPin, OUTPUT);
   pinMode(lightingPin, OUTPUT);
   
+  
+  lightingLed.set_curve(&Curve::exponential);
+
   Serial.begin(9600);
 }
 
@@ -58,7 +68,9 @@ void loop() {
     {
       Serial.println("Motion detected, sensor A");
 
-      activityLed.fadeIn(1000);
+      //activityLed.fadeIn(1000);
+      //lightingLed.fadeIn(1000);
+      lightingLed.fade(255, 5000);
 
       //digitalWrite(activityLedPin, HIGH);
     }
@@ -66,7 +78,9 @@ void loop() {
     {
       Serial.println("Motion gone.");
 
-      activityLed.fadeOut(1000);
+      //activityLed.fadeOut(1000);
+      //lightingLed.fadeOut(1000);
+      lightingLed.fade(70, 5000);
 
       //digitalWrite(activityLedPin, LOW);
     }
@@ -75,6 +89,8 @@ void loop() {
     // Delay a little bit to avoid bouncing
     delay(50);
   }
+
+  lightingLed.update();
 }
 
 
