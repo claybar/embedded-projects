@@ -1,3 +1,9 @@
+## Libraries of interest
+
+### Timing
+
+- Simple rolling aware elapsed timing (good for simple task duration timing like lighting delays) https://github.com/pfeerick/elapsedMillis
+
 ## Timer Usage
 
 All timers default to around 1 kHZ in Arduino firmware.
