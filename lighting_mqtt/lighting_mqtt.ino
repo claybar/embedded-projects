@@ -19,16 +19,16 @@ Within states [Dusk, Night, Dawn] motion
 */
 
 #include <avr/wdt.h>
-#include <Arduino.h>         // may not be needed?
 #include <SPI.h>
 #include <Wire.h>
+#include <EEPROM.h>
 #include <Ethernet.h>
 #include <PubSubClient.h>
-
 #include <LEDFader.h>
 #include <Curve.h>
 
-#include "Secrets.h"
+#include <Config.h>
+
 
 #define LIGHTINGPIN 9
 #define ACTIVITYLEDPIN 13
@@ -37,9 +37,12 @@ Within states [Dusk, Night, Dawn] motion
 
 #define MAC_I2C_ADDR 0x50
 
+
+
 // Storage, will be set by onboard i2c device and DHCP
 byte mac[] = { 0, 0, 0, 0, 0, 0 };
-byte ip[] = { 0, 0, 0, 0 };
+//byte ip[] = { 0, 0, 0, 0 };
+IPAddress ip(MQTT_SERVER_IP);
 
 // Defaults, some can be set later via MQTT
 int lightingLevelOff = 0; // percentage
@@ -76,25 +79,25 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
 {
   // Allocate the correct amount of memory for the payload copy
   char* p = (char*)malloc(length + 1);
+  
   // Copy the payload to the new buffer
   //memcpy(p,payload,length);
+  for (int i = 0; i < length; i++)
+  {
+    p[i] = (char)payload[i];
+  }
+  p[length] = '\0';
   
   Serial.print("MQTT: message received: ");
   Serial.print(topic);
   Serial.print(" => ");
-  for (int i = 0; i < length; i++)
-  {
-    p[i] = (char)payload[i];
-    //Serial.print((char)payload[i]);
-  }
-  p[length] = '\0';
   Serial.print(p);
   Serial.println();
 
-  if (topic == "frontsteps/00:04:A3:D3:30:78/request")
+  if (strcmp(topic, "frontsteps/00:04:A3:D3:30:78/request") == 0)
   {
     Serial.println("MQTT: request received");
-    if (p == "status")
+    if (strcmp(p, "status") == 0)
     {
       Serial.println("MQTT: Sending status");
     }
@@ -109,13 +112,13 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     client.publish(mqttTopicBase + "txperiod", String(MQTT_TX_PERIOD));
     */
   }
-  else if (topic == "setdimmedlevel")
+  else if (strcmp(topic, "setdimmedlevel") == 0)
   {
 
   }
   else
   {
-    Serial.println("  Unrecognised message");
+    Serial.println("  -> Unrecognised message");
   }
 
   free(p);
@@ -294,5 +297,4 @@ byte readI2CRegister(byte i2c_address, byte reg)
   v = Wire.read();
   return v;
 } 
-
 

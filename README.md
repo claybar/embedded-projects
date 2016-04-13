@@ -34,11 +34,17 @@ https://github.com/Imroy/pubsubclient/archive/master.zip
 
 Libraries
 
+LED Fader
+https://github.com/jgillick/arduino-LEDFader/archive/master.zip
+
 LED Abstraction
 http://arduino-info.wikispaces.com/HAL-LibrariesUpdates
 
 Finite State Machine
 http://arduino-info.wikispaces.com/HAL-LibrariesUpdates
+
+MQTT pubsubclient
+https://github.com/knolleary/pubsubclient/archive/master.zip
 
 ## Notes
 PWM not os flash on pins 5 & 6 due to timer usage.
