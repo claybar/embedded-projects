@@ -1,4 +1,9 @@
-Code for home automation projects.
+Code for home automation projects.  Central comms is via MQTT, either via wired ethernet or wireless via WiFi.
+
+# Overall Configuration
+All projects attempt to be general purpose and able to be installed onto multiple devices on the same network.  To do this each unit includes some form of unique ID in their communications.  Many also include a user configurable string, normally configured via MQTT.
+
+Network configuration is included at compile-time by including a common header file <Secrets.h> installed as a library.
 
 # EmonCMS
 
@@ -13,6 +18,7 @@ MQTTWarn used to pull messages from MQTT and feed into EmonCMS
 EtherTen Arduino clone with a openenergy.org EmonTX Shield V2.  This has been modified from stock with the following changes:
 - Ch4 rerouted to Analog pin 6.  This is so the on-board MAC address chip can be addressed via I2C
 - Burden resistors on Ch2 & Ch4 changed to 180ohm to improve sensitivity.  These are used for monitoring a heat pump and house lights.
+
 
 ## Temperature Monitoring
 
@@ -37,15 +43,18 @@ Libraries
 LED Fader
 https://github.com/jgillick/arduino-LEDFader/archive/master.zip
 
+MQTT pubsubclient
+https://github.com/knolleary/pubsubclient/archive/master.zip
+
+Simple elapsed timer
+https://github.com/pfeerick/elapsedMillis
+
+## Other Libraries of interest
+
 LED Abstraction
 http://arduino-info.wikispaces.com/HAL-LibrariesUpdates
 
 Finite State Machine
 http://arduino-info.wikispaces.com/HAL-LibrariesUpdates
 
-MQTT pubsubclient
-https://github.com/knolleary/pubsubclient/archive/master.zip
-
-## Notes
-PWM not os flash on pins 5 & 6 due to timer usage.
 
