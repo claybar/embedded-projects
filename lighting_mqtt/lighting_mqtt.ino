@@ -19,6 +19,7 @@ Within states [Dusk, Night, Dawn] motion
 */
 
 #include <avr/wdt.h>
+#include <EtherTen.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <EEPROM.h>
@@ -26,22 +27,23 @@ Within states [Dusk, Night, Dawn] motion
 #include <PubSubClient.h>
 #include <LEDFader.h>
 #include <Curve.h>
+#include <elapsedMillis.h>
 
-#include <Config.h>
-
+#include <Settings.h>
+#include <Secrets.h>
 
 #define LIGHTINGPIN 9
 #define ACTIVITYLEDPIN 13
 #define MOTIONSENSORAPIN 7
 #define MOTIONSENSORBPIN 6
 
-#define MAC_I2C_ADDR 0x50
-
-
+// Used for short-term string building
+char tmpBuf[33];
+// Used to redirect stdout to the serial port
+FILE serial_stdout;
 
 // Storage, will be set by onboard i2c device and DHCP
 byte mac[] = { 0, 0, 0, 0, 0, 0 };
-//byte ip[] = { 0, 0, 0, 0 };
 IPAddress ip(MQTT_SERVER_IP);
 
 // Defaults, some can be set later via MQTT
@@ -49,6 +51,7 @@ int lightingLevelOff = 0; // percentage
 int lightingLevelAmbient = 10; // percentage
 int lightingLevelBright = 50;  // percentage
 int lightingChangeTime = 5000;  // milliseconds
+unsigned long lightingAfterMotionTime = 5 * 60 * 1000;  // milliseconds
 
 int motionAState = 0;
 int motionBState = 0;
@@ -75,13 +78,17 @@ int  mqttLwtRetain = 1;
 
 PubSubClient mqtt(MQTT_SERVER_IP, 1883, mqtt_callback, ethernet);
 
+// Used to track how long since motion has been detected
+bool recentMotion;
+elapsedMillis motionTimer;
+
+
 void mqtt_callback(char* topic, byte* payload, unsigned int length) 
 {
   // Allocate the correct amount of memory for the payload copy
   char* p = (char*)malloc(length + 1);
   
   // Copy the payload to the new buffer
-  //memcpy(p,payload,length);
   for (int i = 0; i < length; i++)
   {
     p[i] = (char)payload[i];
@@ -124,6 +131,11 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   free(p);
 }
 
+// Function that printf and related will use to print to the serial port
+int serial_putchar(char c, FILE* f) {
+    if (c == '\n') serial_putchar('\r', f);
+    return Serial.write(c) == 1? 0 : 1;
+}
 
 void setup()
 {
@@ -140,8 +152,13 @@ void setup()
   lightingLed.set_curve(&Curve::exponential);
 
   Serial.begin(115200);
-  Serial.println();
-  Serial.println("Sketch ID: lighting_mqtt.ino");
+  // Redirect stdout to the serial port helper
+  fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
+  stdout = &serial_stdout;
+
+  printf("\nSketch ID: lighting_mqtt.ino\n");
+  //Serial.println();
+  //Serial.println("");
   
   // initialise the SPI bus.  
   SPI.begin();
@@ -149,19 +166,19 @@ void setup()
   // Join i2c bus as master
   Wire.begin();
 
-  Serial.print ("MAC address: ");
-  mac[0] = readI2CRegister(MAC_I2C_ADDR, 0xFA);
-  mac[1] = readI2CRegister(MAC_I2C_ADDR, 0xFB);
-  mac[2] = readI2CRegister(MAC_I2C_ADDR, 0xFC);
-  mac[3] = readI2CRegister(MAC_I2C_ADDR, 0xFD);
-  mac[4] = readI2CRegister(MAC_I2C_ADDR, 0xFE);
-  mac[5] = readI2CRegister(MAC_I2C_ADDR, 0xFF);
-  char tmpBuf[17];
-  sprintf(tmpBuf, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  Serial.println(tmpBuf);
+
+  printf("MAC address: ");
+  //Serial.print ("");
+  for (int i = 0 ; i < 6; i++)
+  {
+    mac[i] = readI2CRegister(MAC_I2C_ADDR, MAC_REG_BASE + i);
+  }
+  printf("%02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  //sprintf(tmpBuf, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  //Serial.println(tmpBuf);
+
     
   Serial.print ("IP address: ");
-  // get an IP address
   while (Ethernet.begin(mac) != 1)
   {
     delay(5000);
@@ -169,8 +186,8 @@ void setup()
   }
   Serial.println(Ethernet.localIP());
 
+
   Serial.println ("Connecting to MQTT broker...");
-  // connect to our MQTT broker
   while (!mqttConnect())
   {
     delay(5000);
@@ -179,6 +196,9 @@ void setup()
   // Subscribe to topics
   mqttSubscribe("request");
 
+
+  recentMotion = false;
+  motionTimer = 0;
 }
 
 void loop()
@@ -188,34 +208,48 @@ void loop()
 
   // While motion is present, keep reseting the countdown timer.
   // Fire messages only on positive edges
-
-  if (motionAState == HIGH)
+  if (motionAState == HIGH || motionBState == HIGH)
   {
-    // Reset countdown timer
+    // Reset timer and log presence of motion
+    motionTimer = 0;
+    recentMotion = true; 
 
     // Fire messages on positive edges
     if (motionAState != previousMotionAState)
     { 
       Serial.println("Motion detected, sensor A");
-
-      mqttPublish("motion1", "detected");
+      mqttPublish("motion", "detected-ch1");
     }
-  }
-  
-  if (motionBState == HIGH)
-  {
-    // Reset countdown timer
-
     if (motionBState != previousMotionBState)
-    {
+    { 
       Serial.println("Motion detected, sensor B");
-
-      mqttPublish("motion2", "detected");
+      mqttPublish("motion", "detected-ch2");
     }
   }
-  
+  else  // Sensors low
+  {
+    // Test if there has been recent motion and the it has been gone for a while
+    if (recentMotion && (motionTimer > lightingAfterMotionTime))
+    {
+      recentMotion = false;
+
+      Serial.println("Motion timer expired");
+      mqttPublish("motion", "gone");
+    }
+  }
   previousMotionAState = motionAState;
   previousMotionBState = motionBState;
+
+  
+  // Add in time-of-day to this logic
+  if (recentMotion)
+  {
+    lightingBright();
+  }
+  else
+  {
+    lightingOff();
+  }
 
   // Give all the worker tasks a bit of time
   lightingLed.update();
@@ -257,7 +291,7 @@ void mqttSubscribe(char* name)
   // build the MQTT topic
   // mqttTopicBase/MAC/name
   char topic[64];
-  snprintf(topic, 64, "%s/%02X:%02X:%02X:%02X:%02X:%02X/%s", mqttTopicBase, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],name);
+  snprintf(topic, sizeof(topic), "%s/%02X:%02X:%02X:%02X:%02X:%02X/%s", mqttTopicBase, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],name);
 
   Serial.print("Subscribing to: ");
   Serial.print(topic);
@@ -272,7 +306,7 @@ void mqttPublish(char* name, char* payload)
   // build the MQTT topic
   // mqttTopicBase/MAC/name
   char topic[64];
-  snprintf(topic, 64, "%s/%02X:%02X:%02X:%02X:%02X:%02X/%s", mqttTopicBase, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],name);
+  snprintf(topic, sizeof(topic), "%s/%02X:%02X:%02X:%02X:%02X:%02X/%s", mqttTopicBase, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],name);
 
   Serial.print(topic);
   Serial.print(" ");
