@@ -44,7 +44,7 @@ FILE serial_stdout;
 
 // Storage, will be set by onboard i2c device and DHCP
 byte mac[] = { 0, 0, 0, 0, 0, 0 };
-IPAddress ip(MQTT_SERVER_IP);
+IPAddress mqttIP(MQTT_SERVER_IP);
 
 // Defaults, some can be set later via MQTT
 int lightingLevelOff = 0; // percentage
@@ -62,10 +62,6 @@ int previousMotionBState = 0;
 int txFailCount;
 int txFailCountTotal;
 
-// Hardware and protocol handlers
-LEDFader lightingLed = LEDFader(LIGHTINGPIN);
-
-EthernetClient ethernet;
 
 // MQTT setup
 char mqttClientId[] = "lighting";
@@ -76,12 +72,17 @@ char mqttTopicLwt[] = "clients/frontsteps";
 int  mqttLwtQos = 0;
 int  mqttLwtRetain = 1;
 
-PubSubClient mqtt(MQTT_SERVER_IP, 1883, mqtt_callback, ethernet);
-
 // Used to track how long since motion has been detected
 bool recentMotion;
 elapsedMillis motionTimer;
 
+// Hardware and protocol handlers
+LEDFader lightingLed = LEDFader(LIGHTINGPIN);
+
+EthernetClient ethernet;
+
+//PubSubClient mqtt(MQTT_SERVER_IP, 1883, mqtt_callback, ethernet);
+PubSubClient mqtt(ethernet);
 
 void mqtt_callback(char* topic, byte* payload, unsigned int length) 
 {
@@ -156,7 +157,7 @@ void setup()
   fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
   stdout = &serial_stdout;
 
-  printf("\nSketch ID: lighting_mqtt.ino\n");
+  printf("\nSketch ID: frontsteps_lighting.ino\n");
   //Serial.println();
   //Serial.println("");
   
@@ -185,14 +186,15 @@ void setup()
     Serial.print (".");
   }
   Serial.println(Ethernet.localIP());
-
+  
 
   Serial.println ("Connecting to MQTT broker...");
+  mqtt.setServer(mqttIP, 1883);
+  mqtt.setCallback(mqtt_callback);
   while (!mqttConnect())
   {
     delay(5000);
   }
-
   // Subscribe to topics
   mqttSubscribe("request");
 
