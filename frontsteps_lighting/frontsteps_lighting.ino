@@ -63,12 +63,11 @@ int txFailCount;
 int txFailCountTotal;
 
 // MQTT setup
-const char mqttClientId[] = "frontsteps";
-
+const PROGMEM char mqttClientId[] = "frontsteps";
 // publish to "lighting/MAC/<variable>".
-const char mqttTopicBase[] = "frontsteps";
-const char mqttWillTopic[] = "clients/frontsteps";
-const char mqttWillMessage[] = "unexpected exit";
+const PROGMEM char mqttTopicBase[] = "frontsteps";
+const PROGMEM char mqttWillTopic[] = "clients/frontsteps";
+const PROGMEM char mqttWillMessage[] = "unexpected exit";
 int  mqttWillQos = 0;
 int  mqttWillRetain = 1;
 
