@@ -62,15 +62,15 @@ int previousMotionBState = 0;
 int txFailCount;
 int txFailCountTotal;
 
-
 // MQTT setup
-char mqttClientId[] = "lighting";
+const char mqttClientId[] = "frontsteps";
 
 // publish to "lighting/MAC/<variable>".
-char mqttTopicBase[] = "frontsteps";
-char mqttTopicLwt[] = "clients/frontsteps";
-int  mqttLwtQos = 0;
-int  mqttLwtRetain = 1;
+const char mqttTopicBase[] = "frontsteps";
+const char mqttWillTopic[] = "clients/frontsteps";
+const char mqttWillMessage[] = "unexpected exit";
+int  mqttWillQos = 0;
+int  mqttWillRetain = 1;
 
 // Used to track how long since motion has been detected
 bool recentMotion;
@@ -83,6 +83,9 @@ EthernetClient ethernet;
 
 //PubSubClient mqtt(MQTT_SERVER_IP, 1883, mqtt_callback, ethernet);
 PubSubClient mqtt(ethernet);
+
+// This needs to be here so objects have been defined
+#include <HomeAutomationHelpers.h>
 
 void mqtt_callback(char* topic, byte* payload, unsigned int length) 
 {
@@ -157,8 +160,8 @@ void setup()
   fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
   stdout = &serial_stdout;
 
-  printf("\nSketch ID: frontsteps_lighting.ino\n");
-  //Serial.println();
+  //printf(F("\nSketch ID: frontsteps_lighting.ino\n"));
+  Serial.println(F("\nSketch ID: frontsteps_lighting.ino\n"));
   //Serial.println("");
   
   // initialise the SPI bus.  
@@ -167,8 +170,7 @@ void setup()
   // Join i2c bus as master
   Wire.begin();
 
-
-  printf("MAC address: ");
+  Serial.print(F("MAC address: "));
   //Serial.print ("");
   for (int i = 0 ; i < 6; i++)
   {
@@ -179,7 +181,7 @@ void setup()
   //Serial.println(tmpBuf);
 
     
-  Serial.print ("IP address: ");
+  Serial.print(F("IP address: "));
   while (Ethernet.begin(mac) != 1)
   {
     delay(5000);
@@ -188,7 +190,7 @@ void setup()
   Serial.println(Ethernet.localIP());
   
 
-  Serial.println ("Connecting to MQTT broker...");
+  Serial.println(F("Connecting to MQTT broker..."));
   mqtt.setServer(mqttIP, 1883);
   mqtt.setCallback(mqtt_callback);
   while (!mqttConnect())
@@ -219,12 +221,12 @@ void loop()
     // Fire messages on positive edges
     if (motionAState != previousMotionAState)
     { 
-      Serial.println("Motion detected, sensor A");
+      Serial.println(F("Motion detected, sensor A"));
       mqttPublish("motion", "detected-ch1");
     }
     if (motionBState != previousMotionBState)
     { 
-      Serial.println("Motion detected, sensor B");
+      Serial.println(F("Motion detected, sensor B"));
       mqttPublish("motion", "detected-ch2");
     }
   }
@@ -235,7 +237,7 @@ void loop()
     {
       recentMotion = false;
 
-      Serial.println("Motion timer expired");
+      Serial.println(F("Motion timer expired"));
       mqttPublish("motion", "gone");
     }
   }
@@ -258,7 +260,6 @@ void loop()
   mqtt.loop();
 }
 
-
 void lightingOff()
 {
   lightingLed.fade(lightingLevelOff, lightingChangeTime);
@@ -273,64 +274,3 @@ void lightingBright()
 {
   lightingLed.fade(lightingLevelBright, lightingChangeTime);
 }
-
-boolean mqttConnect() 
-{
-  boolean success = mqtt.connect(mqttClientId, MQTT_USERNAME, MQTT_PASSWORD, mqttTopicLwt, mqttLwtQos, mqttLwtRetain, "0"); 
-  if (success) {
-    Serial.println ("Successfully connected to MQTT broker ");
-    // publish retained LWT so anything listening knows we are alive
-    byte data[] = { "1" };
-    mqtt.publish(mqttTopicLwt, data, 1, mqttLwtRetain);
-  } else {
-    Serial.println ("Failed to connect to MQTT broker");
-  }
-  return success;
-}
-
-void mqttSubscribe(char* name)
-{
-  // build the MQTT topic
-  // mqttTopicBase/MAC/name
-  char topic[64];
-  snprintf(topic, sizeof(topic), "%s/%02X:%02X:%02X:%02X:%02X:%02X/%s", mqttTopicBase, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],name);
-
-  Serial.print("Subscribing to: ");
-  Serial.print(topic);
-  Serial.println();
-
-  // publish to the MQTT broker 
-  mqtt.subscribe(topic);
-}
-
-void mqttPublish(char* name, char* payload)
-{
-  // build the MQTT topic
-  // mqttTopicBase/MAC/name
-  char topic[64];
-  snprintf(topic, sizeof(topic), "%s/%02X:%02X:%02X:%02X:%02X:%02X/%s", mqttTopicBase, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],name);
-
-  Serial.print(topic);
-  Serial.print(" ");
-  Serial.println(payload);
-
-  // publish to the MQTT broker 
-  mqtt.publish(topic, payload);
-}
-
-byte readI2CRegister(byte i2c_address, byte reg)
-{
-  unsigned char v;
-  Wire.beginTransmission(i2c_address);
-  Wire.write(reg);  // Register to read
-  Wire.endTransmission();
-
-  Wire.requestFrom(i2c_address, (uint8_t)1); // Read a byte
-  while(!Wire.available())
-  {
-    // Wait
-  }
-  v = Wire.read();
-  return v;
-} 
-
