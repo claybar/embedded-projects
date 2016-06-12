@@ -171,7 +171,7 @@ void setup()
   while (Ethernet.begin(mac) != 1)
   {
     delay(5000);
-    Serial.print (".");
+    Serial.print(F("."));
   }
   Serial.println(Ethernet.localIP());
   
