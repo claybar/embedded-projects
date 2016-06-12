@@ -263,12 +263,15 @@ void lightingBright()
 boolean mqttConnect() 
 {
   boolean success = mqtt.connect(mqttClientId, MQTT_USERNAME, MQTT_PASSWORD, mqttWillTopic, mqttWillQos, mqttWillRetain, mqttWillMessage); 
-  if (success) {
+  if (success)
+  {
     Serial.println(F("Successfully connected to MQTT broker "));
     // publish retained LWT so anything listening knows we are alive
     byte data[] = { "connected" };
     mqtt.publish(mqttWillTopic, data, 1, mqttWillRetain);
-  } else {
+  }
+  else
+  {
     Serial.println(F("Failed to connect to MQTT broker"));
   }
   return success;
@@ -309,10 +312,7 @@ byte readI2CRegister(byte i2c_address, byte reg)
   Wire.endTransmission();
 
   Wire.requestFrom(i2c_address, (uint8_t)1); // Read a byte
-  while(!Wire.available())
-  {
-    // Wait
-  }
+  while(!Wire.available()) { }
   v = Wire.read();
   return v;
 } 
