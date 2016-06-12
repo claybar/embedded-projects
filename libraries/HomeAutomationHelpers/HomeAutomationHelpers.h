@@ -24,6 +24,9 @@ void mqttSubscribe(char* name)
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/%02X:%02X:%02X:%02X:%02X:%02X/%s", mqttTopicBase, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],name);
 
+  Serial.print("mqttTopicBase: ");
+  Serial.println(mqttTopicBase);
+
   Serial.print("Subscribing to: ");
   Serial.print(topic);
   Serial.println();

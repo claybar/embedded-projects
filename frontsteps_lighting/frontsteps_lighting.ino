@@ -32,10 +32,19 @@ Within states [Dusk, Night, Dawn] motion
 #include <Settings.h>
 #include <Secrets.h>
 
+// Hardware setup
 #define LIGHTINGPIN 9
 #define ACTIVITYLEDPIN 13
 #define MOTIONSENSORAPIN 7
 #define MOTIONSENSORBPIN 6
+
+// MQTT setup
+#define mqttClientId "frontsteps"
+#define mqttTopicBase "frontsteps"
+#define mqttWillTopic "clients/frontsteps"
+#define mqttWillMessage "unexpected exit"
+const int mqttWillQos = 0;
+const int mqttWillRetain = 1;
 
 // Used for short-term string building
 char tmpBuf[33];
@@ -62,15 +71,6 @@ int previousMotionBState = 0;
 int txFailCount;
 int txFailCountTotal;
 
-// MQTT setup
-const PROGMEM char mqttClientId[] = "frontsteps";
-// publish to "lighting/MAC/<variable>".
-const PROGMEM char mqttTopicBase[] = "frontsteps";
-const PROGMEM char mqttWillTopic[] = "clients/frontsteps";
-const PROGMEM char mqttWillMessage[] = "unexpected exit";
-int  mqttWillQos = 0;
-int  mqttWillRetain = 1;
-
 // Used to track how long since motion has been detected
 bool recentMotion;
 elapsedMillis motionTimer;
@@ -80,11 +80,7 @@ LEDFader lightingLed = LEDFader(LIGHTINGPIN);
 
 EthernetClient ethernet;
 
-//PubSubClient mqtt(MQTT_SERVER_IP, 1883, mqtt_callback, ethernet);
 PubSubClient mqtt(ethernet);
-
-// This needs to be here so objects have been defined
-#include <HomeAutomationHelpers.h>
 
 void mqtt_callback(char* topic, byte* payload, unsigned int length) 
 {
@@ -98,29 +94,26 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   }
   p[length] = '\0';
   
-  Serial.print("MQTT: message received: ");
+  Serial.print(F("MQTT: message received: "));
   Serial.print(topic);
-  Serial.print(" => ");
+  Serial.print(F(" => "));
   Serial.print(p);
   Serial.println();
 
-  if (strcmp(topic, "frontsteps/00:04:A3:D3:30:78/request") == 0)
+  if (strcmp(topic, "frontsteps/request") == 0)
   {
-    Serial.println("MQTT: request received");
+    Serial.println(F("MQTT: request received"));
     if (strcmp(p, "status") == 0)
     {
-      Serial.println("MQTT: Sending status");
+      Serial.println(F("MQTT: Sending status"));
     }
-    // Send a bunch of MQTT messages containing status
-    /*
-    IPAddress ip = WiFi.localIP();
-    client.publish(mqttTopicBase + "ip", String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]));
-    client.publish(mqttTopicBase + "freeheap", String(ESP.getFreeHeap()));
-    client.publish(mqttTopicBase + "txfailcount", String(txFailCountTotal));
-    client.publish(mqttTopicBase + "sensorcount", String(sensorCount));
-    client.publish(mqttTopicBase + "sensorperiod", String(SAMPLE_PERIOD));
-    client.publish(mqttTopicBase + "txperiod", String(MQTT_TX_PERIOD));
-    */
+    
+    snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    mqttPublish("mac", tmpBuf);
+
+    IPAddress ip = Ethernet.localIP();
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+    mqttPublish("ip", tmpBuf);
   }
   else if (strcmp(topic, "setdimmedlevel") == 0)
   {
@@ -128,7 +121,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   }
   else
   {
-    Serial.println("  -> Unrecognised message");
+    Serial.println(F(" -> Unrecognised message"));
   }
 
   free(p);
@@ -159,9 +152,7 @@ void setup()
   fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
   stdout = &serial_stdout;
 
-  //printf(F("\nSketch ID: frontsteps_lighting.ino\n"));
   Serial.println(F("\nSketch ID: frontsteps_lighting.ino\n"));
-  //Serial.println("");
   
   // initialise the SPI bus.  
   SPI.begin();
@@ -169,18 +160,14 @@ void setup()
   // Join i2c bus as master
   Wire.begin();
 
-  Serial.print(F("MAC address: "));
-  //Serial.print ("");
+  Serial.print(F("MAC: "));
   for (int i = 0 ; i < 6; i++)
   {
     mac[i] = readI2CRegister(MAC_I2C_ADDR, MAC_REG_BASE + i);
   }
   printf("%02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  //sprintf(tmpBuf, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  //Serial.println(tmpBuf);
-
     
-  Serial.print(F("IP address: "));
+  Serial.print(F("IP: "));
   while (Ethernet.begin(mac) != 1)
   {
     delay(5000);
@@ -196,9 +183,7 @@ void setup()
   {
     delay(5000);
   }
-  // Subscribe to topics
   mqttSubscribe("request");
-
 
   recentMotion = false;
   motionTimer = 0;
@@ -273,3 +258,62 @@ void lightingBright()
 {
   lightingLed.fade(lightingLevelBright, lightingChangeTime);
 }
+
+
+boolean mqttConnect() 
+{
+  boolean success = mqtt.connect(mqttClientId, MQTT_USERNAME, MQTT_PASSWORD, mqttWillTopic, mqttWillQos, mqttWillRetain, mqttWillMessage); 
+  if (success) {
+    Serial.println(F("Successfully connected to MQTT broker "));
+    // publish retained LWT so anything listening knows we are alive
+    byte data[] = { "connected" };
+    mqtt.publish(mqttWillTopic, data, 1, mqttWillRetain);
+  } else {
+    Serial.println(F("Failed to connect to MQTT broker"));
+  }
+  return success;
+}
+
+void mqttSubscribe(char* name)
+{
+  // build the MQTT topic: mqttTopicBase/name
+  char topic[64];
+  snprintf(topic, sizeof(topic), "%s/%s", mqttTopicBase, name);
+
+  Serial.print(F("Subscribing to: "));
+  Serial.println(topic);
+  
+  // publish to the MQTT broker 
+  mqtt.subscribe(topic);
+}
+
+void mqttPublish(char* name, char* payload)
+{
+  // build the MQTT topic: mqttTopicBase/name
+  char topic[64];
+  snprintf(topic, sizeof(topic), "%s/status/%s", mqttTopicBase, name);
+
+  Serial.print(topic);
+  Serial.print(F(" "));
+  Serial.println(payload);
+
+  // publish to the MQTT broker 
+  mqtt.publish(topic, payload);
+}
+
+byte readI2CRegister(byte i2c_address, byte reg)
+{
+  unsigned char v;
+  Wire.beginTransmission(i2c_address);
+  Wire.write(reg);  // Register to read
+  Wire.endTransmission();
+
+  Wire.requestFrom(i2c_address, (uint8_t)1); // Read a byte
+  while(!Wire.available())
+  {
+    // Wait
+  }
+  v = Wire.read();
+  return v;
+} 
+
