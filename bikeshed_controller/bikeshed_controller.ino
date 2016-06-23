@@ -40,7 +40,7 @@ Within states [Dusk, Night, Dawn] motion
 #define MAC_REG_BASE 0xFA
 
 // Logic of motion and door sensors
-#define MOTION HIGH
+#define MOTION LOW
 #define DOOROPEN HIGH
 
 #define ON true
@@ -55,7 +55,7 @@ const int mqttWillQos = 0;
 const int mqttWillRetain = 1;
 
 // Defaults, some can be set later via MQTT
-const unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
+unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
 
 // Used for short-term string building
 char tmpBuf[33];
@@ -80,6 +80,8 @@ int txFailCount;
 int txFailCountTotal;
 
 elapsedMillis motionTimer;
+
+unsigned long timerPrevious;
 
 // Hardware and protocol handlers
 EthernetClient ethernet;
@@ -186,6 +188,7 @@ void setup()
 
   recentActivity = false;
   motionTimer = 0;
+  timerPrevious = 0;
 }
 
 void loop()
@@ -219,6 +222,7 @@ void loop()
   {
     // Reset timer and log presence of motion
     motionTimer = 0;
+    timerPrevious = 0;
     recentActivity = true;
 
     // Fire messages on positive edges
@@ -236,12 +240,26 @@ void loop()
   else  // Sensors all inactive, start the countdown
   {
     // Test if there has been recent motion and it has been gone for a while
-    if (recentActivity && (motionTimer > outsideLightAfterMotionTime))
+    if (recentActivity)
     {
-      recentActivity = false;
+      if (motionTimer > outsideLightAfterMotionTime)
+      {
+        recentActivity = false;
 
-      Serial.println(F("Motion timer expired"));
-      mqttPublish("motion", "gone");
+        Serial.println(F("Motion timer expired"));
+        mqttPublish("motion", "gone");
+      }
+      else
+      {
+        if (motionTimer > timerPrevious + 1000)
+        {
+          Serial.print(motionTimer / 1000);
+          Serial.print(" of ");
+          Serial.println(outsideLightAfterMotionTime / 1000);
+
+          timerPrevious += 1000;
+        }
+      }  
     }
   }
   previousMotionAState = motionAState;
@@ -307,6 +325,7 @@ void mqttPublish(char* name, char* payload)
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/status/%s", mqttTopicBase, name);
 
+  Serial.print(F("MQTT: "));
   Serial.print(topic);
   Serial.print(F(" "));
   Serial.println(payload);
