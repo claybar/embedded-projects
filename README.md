@@ -36,6 +36,10 @@ https://github.com/milesburton/Arduino-Temperature-Control-Library/archive/maste
 MQTT pubsubclient
 https://github.com/Imroy/pubsubclient/archive/master.zip
 
+## Common libraries
+
+Arduino-Ping https://github.com/BlakeFoster/Arduino-Ping
+
 ## Lighting Control
 
 Libraries
