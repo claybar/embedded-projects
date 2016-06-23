@@ -19,14 +19,10 @@ Within states [Dusk, Night, Dawn] motion
 */
 
 #include <avr/wdt.h>
-#include <EtherTen.h>
 #include <SPI.h>
 #include <Wire.h>
-#include <EEPROM.h>
 #include <Ethernet.h>
 #include <PubSubClient.h>
-#include <LEDFader.h>
-#include <Curve.h>
 #include <elapsedMillis.h>
 
 #include <Settings.h>
@@ -40,6 +36,16 @@ Within states [Dusk, Night, Dawn] motion
 #define MOTIONSENSORBPIN 3
 #define DOORSENSORPIN 7
 
+#define MAC_I2C_ADDR 0x50
+#define MAC_REG_BASE 0xFA
+
+// Logic of motion and door sensors
+#define MOTION HIGH
+#define DOOROPEN HIGH
+
+#define ON true
+#define OFF false
+
 // MQTT setup
 #define mqttClientId "bikeshed"
 #define mqttTopicBase "bikeshed"
@@ -48,8 +54,12 @@ Within states [Dusk, Night, Dawn] motion
 const int mqttWillQos = 0;
 const int mqttWillRetain = 1;
 
+// Defaults, some can be set later via MQTT
+const unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
+
 // Used for short-term string building
 char tmpBuf[33];
+
 // Used to redirect stdout to the serial port
 FILE serial_stdout;
 
@@ -57,27 +67,21 @@ FILE serial_stdout;
 byte mac[] = { 0, 0, 0, 0, 0, 0 };
 IPAddress mqttIP(MQTT_SERVER_IP);
 
-// Defaults, some can be set later via MQTT
-unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
-
-int motionAState = 0;
-int motionBState = 0;
-int doorState = 0;
-int previousMotionAState = 0;
-int previousMotionBState = 0;
-int previousDoorState = 0;
+bool motionAState = false;
+bool motionBState = false;
+bool doorState = false;
+bool previousMotionAState = false;
+bool previousMotionBState = false;
+bool previousDoorState = false;
+bool recentActivity = false;    // Used to track how long since motion has been detected
 
 // Counters for tracking failed transmissions.  Used to reset processor after repeated failures.
 int txFailCount;
 int txFailCountTotal;
 
-// Used to track how long since motion has been detected
-bool recentMotion;
 elapsedMillis motionTimer;
 
 // Hardware and protocol handlers
-// LEDFader lightingLed = LEDFader(LIGHTINGPIN);
-
 EthernetClient ethernet;
 PubSubClient mqtt(ethernet);
 
@@ -145,9 +149,6 @@ void setup()
   // ensure the watchdog is disabled for now
   wdt_disable();
   
-  // More linear illumination for human eyes
-  //lightingLed.set_curve(&Curve::exponential);
-
   Serial.begin(115200);
   // Redirect stdout to the serial port helper
   fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
@@ -155,10 +156,8 @@ void setup()
 
   Serial.println(F("\nSketch ID: bikeshed_controller.ino\n"));
   
-  // initialise the SPI bus.  
+  // initialise the SPI and i2c busses.  
   SPI.begin();
-
-  // Join i2c bus as master
   Wire.begin();
 
   Serial.print(F("MAC: "));
@@ -176,7 +175,6 @@ void setup()
   }
   Serial.println(Ethernet.localIP());
   
-
   Serial.println(F("Connecting to MQTT broker..."));
   mqtt.setServer(mqttIP, 1883);
   mqtt.setCallback(mqtt_callback);
@@ -186,7 +184,7 @@ void setup()
   }
   mqttSubscribe("request");
 
-  recentMotion = false;
+  recentActivity = false;
   motionTimer = 0;
 }
 
@@ -200,26 +198,28 @@ void loop()
   if (doorState != previousDoorState)
   {
     previousDoorState = doorState;
-    if (doorState == LOW)
+
+    if (doorState == DOOROPEN)
     {
-      Serial.println(F("Door closed"));
-      mqttPublish("door", "closed");
+      Serial.println(F("Door open"));
+      mqttPublish("door", "open");
+      insideLights(ON); 
     }
     else
     {
-      Serial.println(F("Door open"));
-      mqttPublish("door", "open");   
+      Serial.println(F("Door closed"));
+      mqttPublish("door", "closed");
+      insideLights(OFF);
     }
-    outsideLights(doorState);
   }
   
-  // While motion is present, keep reseting the countdown timer.
+  // While motion present or door is open, keep reseting the countdown timer.
   // Fire messages only on positive edges
-  if (motionAState == HIGH || motionBState == HIGH)
+  if (motionAState == MOTION || motionBState == MOTION || doorState == DOOROPEN)
   {
     // Reset timer and log presence of motion
     motionTimer = 0;
-    recentMotion = true; 
+    recentActivity = true;
 
     // Fire messages on positive edges
     if (motionAState != previousMotionAState)
@@ -233,12 +233,12 @@ void loop()
       mqttPublish("motion", "detected-ch2");
     }
   }
-  else  // Sensors low
+  else  // Sensors all inactive, start the countdown
   {
     // Test if there has been recent motion and it has been gone for a while
-    if (recentMotion && (motionTimer > outsideLightAfterMotionTime))
+    if (recentActivity && (motionTimer > outsideLightAfterMotionTime))
     {
-      recentMotion = false;
+      recentActivity = false;
 
       Serial.println(F("Motion timer expired"));
       mqttPublish("motion", "gone");
@@ -247,19 +247,17 @@ void loop()
   previousMotionAState = motionAState;
   previousMotionBState = motionBState;
 
-  
   // Add in time-of-day to this logic
-  if (recentMotion)
+  if (recentActivity)
   {
-    insideLights(true);
+    outsideLights(ON);
   }
   else
   {
-    insideLights(false);
+    outsideLights(OFF);
   }
 
   // Give all the worker tasks a bit of time
-  //lightingLed.update();
   mqtt.loop();
 }
 
@@ -280,7 +278,7 @@ boolean mqttConnect()
   {
     Serial.println(F("Successfully connected to MQTT broker "));
     // publish retained LWT so anything listening knows we are alive
-    byte data[] = { "connected" };
+    const byte data[] = { "connected" };
     mqtt.publish(mqttWillTopic, data, 1, mqttWillRetain);
   }
   else
