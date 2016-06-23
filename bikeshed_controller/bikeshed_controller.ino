@@ -22,6 +22,7 @@ Within states [Dusk, Night, Dawn] motion
 #include <SPI.h>
 #include <Wire.h>
 #include <Ethernet.h>
+#include <ICMPPing.h>
 #include <PubSubClient.h>
 #include <elapsedMillis.h>
 
@@ -60,12 +61,18 @@ unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // millisec
 // Used for short-term string building
 char tmpBuf[33];
 
+// Ping
+char buffer [256];    
+SOCKET pingSocket = 0;
+ICMPPing ping(pingSocket, (uint16_t)random(0, 255));
+
 // Used to redirect stdout to the serial port
 FILE serial_stdout;
 
 // Storage, will be set by onboard i2c device and DHCP
 byte mac[] = { 0, 0, 0, 0, 0, 0 };
 IPAddress mqttIP(MQTT_SERVER_IP);
+IPAddress pingAddr(MQTT_SERVER_IP);
 
 bool motionAState = false;
 bool motionBState = false;
@@ -80,8 +87,10 @@ int txFailCount;
 int txFailCountTotal;
 
 elapsedMillis motionTimer;
-
 unsigned long timerPrevious;
+
+elapsedMillis heartbeatTimer;
+unsigned long heartbeatTimerPrevious;
 
 // Hardware and protocol handlers
 EthernetClient ethernet;
@@ -273,6 +282,53 @@ void loop()
   else
   {
     outsideLights(OFF);
+  }
+
+  // heartbeat
+  if (heartbeatTimer > heartbeatTimerPrevious + 1000)
+  {
+    Serial.println(F("tick"));
+    heartbeatTimerPrevious += 1000;
+
+    Ethernet.maintain();
+
+
+
+    ICMPEchoReply echoReply = ping(pingAddr, 4);
+    if (echoReply.status == SUCCESS)
+    {
+      sprintf(buffer,
+            "Reply[%d] from: %d.%d.%d.%d: bytes=%d time=%ldms TTL=%d",
+            echoReply.data.seq,
+            echoReply.addr[0],
+            echoReply.addr[1],
+            echoReply.addr[2],
+            echoReply.addr[3],
+            REQ_DATASIZE,
+            millis() - echoReply.data.time,
+            echoReply.ttl);
+    }
+    else
+    {
+      sprintf(buffer, "Echo request failed; %d", echoReply.status);
+    }
+    Serial.println(buffer);
+  
+
+
+    /*
+    // Flush anything out of the ethernet
+    if (ethernet.available())
+    {
+      char c = ethernet.read();
+      Serial.print(c);
+    }
+
+    if (!ethernet.connected())
+    {
+      Serial.println(F("Ethernet not detected"));
+    }
+    */
   }
 
   // Give all the worker tasks a bit of time
