@@ -62,7 +62,6 @@ unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // millisec
 char tmpBuf[33];
 
 // Ping
-char buffer [256];    
 SOCKET pingSocket = 0;
 ICMPPing ping(pingSocket, (uint16_t)random(0, 255));
 
@@ -297,6 +296,9 @@ void loop()
     ICMPEchoReply echoReply = ping(pingAddr, 4);
     if (echoReply.status == SUCCESS)
     {
+      Serial.println(F("Ping success"));
+    
+      /*
       sprintf(buffer,
             "Reply[%d] from: %d.%d.%d.%d: bytes=%d time=%ldms TTL=%d",
             echoReply.data.seq,
@@ -307,28 +309,14 @@ void loop()
             REQ_DATASIZE,
             millis() - echoReply.data.time,
             echoReply.ttl);
+            */
     }
     else
     {
-      sprintf(buffer, "Echo request failed; %d", echoReply.status);
+      Serial.println(F("Ping failed"));
+    
+      //sprintf(buffer, "Echo request failed; %d", echoReply.status);
     }
-    Serial.println(buffer);
-  
-
-
-    /*
-    // Flush anything out of the ethernet
-    if (ethernet.available())
-    {
-      char c = ethernet.read();
-      Serial.print(c);
-    }
-
-    if (!ethernet.connected())
-    {
-      Serial.println(F("Ethernet not detected"));
-    }
-    */
   }
 
   // Give all the worker tasks a bit of time
