@@ -62,8 +62,13 @@ unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // millisec
 char tmpBuf[33];
 
 // Ping
+IPAddress pingAddr(MQTT_SERVER_IP);
 SOCKET pingSocket = 0;
 ICMPPing ping(pingSocket, (uint16_t)random(0, 255));
+ICMPEchoReply echoResult;
+#define PING_REQUEST_TIMEOUT_MS     2500  // 1000 to 5000?
+bool lastPingSucceeded = false;
+#define ICMPPING_ASYNCH_ENABLE
 
 // Used to redirect stdout to the serial port
 FILE serial_stdout;
@@ -71,7 +76,6 @@ FILE serial_stdout;
 // Storage, will be set by onboard i2c device and DHCP
 byte mac[] = { 0, 0, 0, 0, 0, 0 };
 IPAddress mqttIP(MQTT_SERVER_IP);
-IPAddress pingAddr(MQTT_SERVER_IP);
 
 bool motionAState = false;
 bool motionBState = false;
@@ -176,7 +180,9 @@ void setup()
     mac[i] = readI2CRegister(MAC_I2C_ADDR, MAC_REG_BASE + i);
   }
   printf("%02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    
+  
+  ICMPPing::setTimeout(PING_REQUEST_TIMEOUT_MS);
+
   Serial.print(F("IP: "));
   while (Ethernet.begin(mac) != 1)
   {
@@ -291,32 +297,40 @@ void loop()
 
     Ethernet.maintain();
 
+    lastPingSucceeded = false;
+    if (! ping.asyncStart(pingAddr, 3, echoResult))
+    {
+      Serial.print(F("Couldn't send ping, Status: "));
+      Serial.println((int)echoResult.status);
+    }
 
+    if (ping.asyncComplete(echoResult))
+    {
+      if (echoResult.status != SUCCESS)
+      {
+        Serial.print(F("Ping request failed; "));
+        Serial.println(echoResult.status);
+      }
+      else
+      {
+        lastPingSucceeded = true;
+        Serial.print(F("Ping returned; "));
+        Serial.print(millis() - echoResult.data.time);
+        Serial.println(F("ms"));
+      }
+    }
 
+    /*
     ICMPEchoReply echoReply = ping(pingAddr, 4);
     if (echoReply.status == SUCCESS)
     {
       Serial.println(F("Ping success"));
-    
-      /*
-      sprintf(buffer,
-            "Reply[%d] from: %d.%d.%d.%d: bytes=%d time=%ldms TTL=%d",
-            echoReply.data.seq,
-            echoReply.addr[0],
-            echoReply.addr[1],
-            echoReply.addr[2],
-            echoReply.addr[3],
-            REQ_DATASIZE,
-            millis() - echoReply.data.time,
-            echoReply.ttl);
-            */
     }
     else
     {
       Serial.println(F("Ping failed"));
-    
-      //sprintf(buffer, "Echo request failed; %d", echoReply.status);
     }
+    */
   }
 
   // Give all the worker tasks a bit of time
@@ -350,7 +364,7 @@ boolean mqttConnect()
   return success;
 }
 
-void mqttSubscribe(char* name)
+void mqttSubscribe(const char* name)
 {
   // build the MQTT topic: mqttTopicBase/name
   char topic[64];
@@ -363,7 +377,7 @@ void mqttSubscribe(char* name)
   mqtt.subscribe(topic);
 }
 
-void mqttPublish(char* name, char* payload)
+void mqttPublish(const char* name, const char* payload)
 {
   // build the MQTT topic: mqttTopicBase/name
   char topic[64];
