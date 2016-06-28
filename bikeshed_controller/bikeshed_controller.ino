@@ -22,9 +22,12 @@ Within states [Dusk, Night, Dawn] motion
 #include <SPI.h>
 #include <Wire.h>
 #include <Ethernet.h>
+#include <EthernetUdp.h>
 #include <ICMPPing.h>
 #include <PubSubClient.h>
 #include <elapsedMillis.h>
+#include <TimeLib.h>
+#include <TimeAlarms.h>
 
 #include <Settings.h>
 #include <Secrets.h>
@@ -59,7 +62,8 @@ const int mqttWillRetain = 1;
 unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
 
 // Used for short-term string building
-char tmpBuf[33];
+// Also used for NTP reply
+char tmpBuf[48];
 
 // Ping
 IPAddress pingAddr(MQTT_SERVER_IP);
@@ -70,12 +74,16 @@ ICMPEchoReply echoResult;
 bool lastPingSucceeded = false;
 #define ICMPPING_ASYNCH_ENABLE
 
+// NTP
+const int NTP_PACKET_SIZE = 48;
+
 // Used to redirect stdout to the serial port
 FILE serial_stdout;
 
 // Storage, will be set by onboard i2c device and DHCP
 byte mac[] = { 0, 0, 0, 0, 0, 0 };
 IPAddress mqttIP(MQTT_SERVER_IP);
+IPAddress ntpIP(NTP_SERVER_IP);
 
 bool motionAState = false;
 bool motionBState = false;
@@ -86,8 +94,8 @@ bool previousDoorState = false;
 bool recentActivity = false;    // Used to track how long since motion has been detected
 
 // Counters for tracking failed transmissions.  Used to reset processor after repeated failures.
-int txFailCount;
-int txFailCountTotal;
+//int txFailCount;
+//int txFailCountTotal;
 
 elapsedMillis motionTimer;
 unsigned long timerPrevious;
@@ -97,7 +105,9 @@ unsigned long heartbeatTimerPrevious;
 
 // Hardware and protocol handlers
 EthernetClient ethernet;
+EthernetUDP udp;
 PubSubClient mqtt(ethernet);
+const unsigned int udpPort = 8888;  // local port to listen for UDP packets
 
 void mqtt_callback(char* topic, byte* payload, unsigned int length) 
 {
@@ -191,6 +201,10 @@ void setup()
   }
   Serial.println(Ethernet.localIP());
   
+  Serial.println(F("Setting time via NTP..."));
+  udp.begin(udpPort);
+  setSyncProvider(getNtpTime);
+
   Serial.println(F("Connecting to MQTT broker..."));
   mqtt.setServer(mqttIP, 1883);
   mqtt.setCallback(mqtt_callback);
@@ -200,6 +214,11 @@ void setup()
   }
   mqttSubscribe("request");
 
+  Serial.println(F("Setting alarms and timers..."));
+  Alarm.timerRepeat(60 * 60, hourlyTimer);
+  Alarm.timerRepeat( 5 * 60, fiveMinsTimer);
+
+  // State initialisation
   recentActivity = false;
   motionTimer = 0;
   timerPrevious = 0;
@@ -319,22 +338,11 @@ void loop()
         Serial.println(F("ms"));
       }
     }
-
-    /*
-    ICMPEchoReply echoReply = ping(pingAddr, 4);
-    if (echoReply.status == SUCCESS)
-    {
-      Serial.println(F("Ping success"));
-    }
-    else
-    {
-      Serial.println(F("Ping failed"));
-    }
-    */
   }
 
   // Give all the worker tasks a bit of time
   mqtt.loop();
+  Alarm.delay(1);
 }
 
 void insideLights(bool state)
@@ -405,3 +413,63 @@ byte readI2CRegister(byte i2c_address, byte reg)
   return v;
 } 
 
+/*-------- NTP code ----------*/
+//const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
+//byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
+
+time_t getNtpTime()
+{
+  while (udp.parsePacket() > 0) ; // discard any previously received packets
+  Serial.println(F("Transmit NTP Request"));
+  sendNTPpacket(ntpIP);
+  uint32_t beginWait = millis();
+  while (millis() - beginWait < 1500) {
+    int size = udp.parsePacket();
+    if (size >= NTP_PACKET_SIZE) {
+      Serial.println(F("Receive NTP Response"));
+      udp.read((byte*)tmpBuf, NTP_PACKET_SIZE);  // read packet into the buffer
+      unsigned long secsSince1900;
+      // convert four bytes starting at location 40 to a long integer
+      secsSince1900 =  (unsigned long)tmpBuf[40] << 24;
+      secsSince1900 |= (unsigned long)tmpBuf[41] << 16;
+      secsSince1900 |= (unsigned long)tmpBuf[42] << 8;
+      secsSince1900 |= (unsigned long)tmpBuf[43];
+      return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
+    }
+  }
+  Serial.println(F("No NTP Response :-("));
+  return 0; // return 0 if unable to get the time
+}
+
+// send an NTP request to the time server at the given address
+void sendNTPpacket(IPAddress &address)
+{
+  // set all bytes in the buffer to 0
+  memset(tmpBuf, 0, NTP_PACKET_SIZE);
+  // Initialize values needed to form NTP request
+  // (see URL above for details on the packets)
+  tmpBuf[0] = 0b11100011;   // LI, Version, Mode
+  tmpBuf[1] = 0;     // Stratum, or type of clock
+  tmpBuf[2] = 6;     // Polling Interval
+  tmpBuf[3] = 0xEC;  // Peer Clock Precision
+  // 8 bytes of zero for Root Delay & Root Dispersion
+  tmpBuf[12]  = 49;
+  tmpBuf[13]  = 0x4E;
+  tmpBuf[14]  = 49;
+  tmpBuf[15]  = 52;
+  // all NTP fields have been given values, now
+  // you can send a packet requesting a timestamp:                 
+  udp.beginPacket(address, 123); //NTP requests are to port 123
+  udp.write(tmpBuf, NTP_PACKET_SIZE);
+  udp.endPacket();
+}
+
+void hourlyTimer()
+{
+  Serial.print(F("Hourly timer triggered"));
+}
+
+void fiveMinsTimer()
+{
+  Serial.print(F("5 min timer triggered"));
+}
