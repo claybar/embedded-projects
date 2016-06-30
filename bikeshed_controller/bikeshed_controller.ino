@@ -28,6 +28,7 @@ Within states [Dusk, Night, Dawn] motion
 #include <elapsedMillis.h>
 #include <TimeLib.h>
 #include <TimeAlarms.h>
+#include <SerialCommand.h>
 
 #include <Settings.h>
 #include <Secrets.h>
@@ -85,6 +86,7 @@ byte mac[] = { 0, 0, 0, 0, 0, 0 };
 IPAddress mqttIP(MQTT_SERVER_IP);
 IPAddress ntpIP(NTP_SERVER_IP);
 
+// State control variables
 bool motionAState = false;
 bool motionBState = false;
 bool doorState = false;
@@ -107,6 +109,7 @@ unsigned long heartbeatTimerPrevious;
 EthernetClient ethernet;
 EthernetUDP udp;
 PubSubClient mqtt(ethernet);
+SerialCommand serialCmd;
 const unsigned int udpPort = 8888;  // local port to listen for UDP packets
 
 void mqtt_callback(char* topic, byte* payload, unsigned int length) 
@@ -213,6 +216,14 @@ void setup()
     delay(5000);
   }
   mqttSubscribe("request");
+
+  // Setup callbacks for SerialCommand commands
+  Serial.println(F("Setting up serial port monitor..."));
+  //sCmd.addCommand("ON",    LED_on);          // Turns LED on
+  //sCmd.addCommand("OFF",   LED_off);         // Turns LED off
+  //sCmd.addCommand("HELLO", sayHello);        // Echos the string argument back
+  serialCmd.addCommand("MQTT", serialMQTT);  // Relays MQTT message using 2 parameters
+  serialCmd.setDefaultHandler(serialUnrecognized);      // Handler for command that isn't matched  (says "What?")
 
   Serial.println(F("Setting alarms and timers..."));
   Alarm.timerRepeat(60 * 60, hourlyTimer);
@@ -341,10 +352,12 @@ void loop()
   }
 
   // Give all the worker tasks a bit of time
+  serialCmd.readSerial();
   mqtt.loop();
   Alarm.delay(1);
 }
 
+/*-------- Hardware Abstraction ----------*/
 void insideLights(bool state)
 {
   digitalWrite(INSIDELIGHTSPIN, state);
@@ -355,6 +368,7 @@ void outsideLights(bool state)
   digitalWrite(OUTSIDELIGHTSPIN, state);
 }
 
+/*-------- MQTT ----------*/
 boolean mqttConnect() 
 {
   boolean success = mqtt.connect(mqttClientId, MQTT_USERNAME, MQTT_PASSWORD, mqttWillTopic, mqttWillQos, mqttWillRetain, mqttWillMessage); 
@@ -400,6 +414,7 @@ void mqttPublish(const char* name, const char* payload)
   mqtt.publish(topic, payload);
 }
 
+/*-------- I2C ----------*/
 byte readI2CRegister(byte i2c_address, byte reg)
 {
   unsigned char v;
@@ -413,7 +428,49 @@ byte readI2CRegister(byte i2c_address, byte reg)
   return v;
 } 
 
-/*-------- NTP code ----------*/
+/*-------- Serial Monitor ----------*/
+void serialMQTT()
+{
+  //int aNumber;
+  char *topic;
+  char *payload;
+
+  Serial.println(F("Serial MQTT message received"));
+  topic = serialCmd.next();
+  if (topic != NULL)
+  {
+    Serial.print(F("  Topic: "));
+    Serial.println(topic);
+  }
+  else
+  {
+    Serial.println(F("  No topic"));
+  }
+
+  payload = serialCmd.next();
+  if (payload != NULL)
+  {
+    Serial.print(F("  Payload: "));
+    Serial.println(payload);
+  }
+  else
+  {
+    Serial.println(F("  No payload"));
+  }
+
+  if (topic != NULL && payload != NULL)
+  {
+    // Send a MQTT message
+    mqttPublish(topic, payload);
+  }
+}
+
+// This gets set as the default handler, and gets called when no other command matches.
+void serialUnrecognized(const char *command) {
+  Serial.println(F("Unrecognized serial command received"));
+}
+
+/*-------- NTP ----------*/
 //const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
 //byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
 
@@ -464,6 +521,7 @@ void sendNTPpacket(IPAddress &address)
   udp.endPacket();
 }
 
+/*-------- Timers ----------*/
 void hourlyTimer()
 {
   Serial.print(F("Hourly timer triggered"));
