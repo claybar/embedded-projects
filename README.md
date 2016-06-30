@@ -40,6 +40,8 @@ https://github.com/Imroy/pubsubclient/archive/master.zip
 
 Arduino-Ping https://github.com/BlakeFoster/Arduino-Ping
 
+Serial command parser https://github.com/kroimon/Arduino-SerialCommand
+
 ## Lighting Control
 
 Libraries
