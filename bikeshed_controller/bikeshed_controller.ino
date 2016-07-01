@@ -325,8 +325,6 @@ void loop()
     Serial.println(F("tick"));
     heartbeatTimerPrevious += 1000;
 
-    Ethernet.maintain();
-
     lastPingSucceeded = false;
     if (! ping.asyncStart(pingAddr, 3, echoResult))
     {
@@ -352,6 +350,7 @@ void loop()
   }
 
   // Give all the worker tasks a bit of time
+  Ethernet.maintain();
   serialCmd.readSerial();
   mqtt.loop();
   Alarm.delay(1);
