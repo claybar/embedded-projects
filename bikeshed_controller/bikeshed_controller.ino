@@ -58,6 +58,10 @@ Within states [Dusk, Night, Dawn] motion
 #define mqttWillMessage "unexpected exit"
 const int mqttWillQos = 0;
 const int mqttWillRetain = 1;
+int mqttFailCount = 0;
+int mqttDisconnectedCount = 0;
+const int mqttFailCountLimit = 5;
+const int mqttDisconnectedCountLimit = 5;
 
 // Defaults, some can be set later via MQTT
 unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
@@ -67,6 +71,7 @@ unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // millisec
 char tmpBuf[48];
 
 // Ping
+/*
 IPAddress pingAddr(MQTT_SERVER_IP);
 SOCKET pingSocket = 0;
 ICMPPing ping(pingSocket, (uint16_t)random(0, 255));
@@ -74,6 +79,7 @@ ICMPEchoReply echoResult;
 #define PING_REQUEST_TIMEOUT_MS     2500  // 1000 to 5000?
 bool lastPingSucceeded = false;
 #define ICMPPING_ASYNCH_ENABLE
+*/
 
 // NTP
 const int NTP_PACKET_SIZE = 48;
@@ -94,10 +100,6 @@ bool previousMotionAState = false;
 bool previousMotionBState = false;
 bool previousDoorState = false;
 bool recentActivity = false;    // Used to track how long since motion has been detected
-
-// Counters for tracking failed transmissions.  Used to reset processor after repeated failures.
-//int txFailCount;
-//int txFailCountTotal;
 
 elapsedMillis motionTimer;
 unsigned long timerPrevious;
@@ -194,16 +196,9 @@ void setup()
   }
   printf("%02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   
-  ICMPPing::setTimeout(PING_REQUEST_TIMEOUT_MS);
+  Serial.println(F("Connecting ethernet"));
+  ethernetConnect();
 
-  Serial.print(F("IP: "));
-  while (Ethernet.begin(mac) != 1)
-  {
-    delay(5000);
-    Serial.print(F("."));
-  }
-  Serial.println(Ethernet.localIP());
-  
   Serial.println(F("Setting time via NTP..."));
   udp.begin(udpPort);
   setSyncProvider(getNtpTime);
@@ -211,12 +206,9 @@ void setup()
   Serial.println(F("Connecting to MQTT broker..."));
   mqtt.setServer(mqttIP, 1883);
   mqtt.setCallback(mqtt_callback);
-  while (!mqttConnect())
-  {
-    delay(5000);
-  }
-  mqttSubscribe("request");
-
+  mqttConnect();
+  mqttSetupSubscriptions();
+  
   // Setup callbacks for SerialCommand commands
   Serial.println(F("Setting up serial port monitor..."));
   //sCmd.addCommand("ON",    LED_on);          // Turns LED on
@@ -325,27 +317,20 @@ void loop()
     Serial.println(F("tick"));
     heartbeatTimerPrevious += 1000;
 
-    lastPingSucceeded = false;
-    if (! ping.asyncStart(pingAddr, 3, echoResult))
+    // Something is wrong with MQTT
+    if (!ethernet.connected())
     {
-      Serial.print(F("Couldn't send ping, Status: "));
-      Serial.println((int)echoResult.status);
+      // Restart ethernet
+      Serial.println(F("Restarting ethernet"));
+      ethernetConnect();
     }
 
-    if (ping.asyncComplete(echoResult))
+    if (errorMonitorMQTT() > 0)
     {
-      if (echoResult.status != SUCCESS)
-      {
-        Serial.print(F("Ping request failed; "));
-        Serial.println(echoResult.status);
-      }
-      else
-      {
-        lastPingSucceeded = true;
-        Serial.print(F("Ping returned; "));
-        Serial.print(millis() - echoResult.data.time);
-        Serial.println(F("ms"));
-      }
+      // Restart MQTT
+      Serial.println(F("Restarting MQTT"));
+      mqttConnect();
+      mqttSetupSubscriptions();
     }
   }
 
@@ -367,13 +352,35 @@ void outsideLights(bool state)
   digitalWrite(OUTSIDELIGHTSPIN, state);
 }
 
-/*-------- MQTT ----------*/
+/*-------- MQTT broker interaction ----------*/
+boolean ethernetConnect()
+{  
+  byte status = Ethernet.begin(mac);
+  if(status == 1)
+  {
+    Serial.print(F("  Assigned IP: "));
+    Serial.println(Ethernet.localIP());
+  }
+  else
+  {
+    Serial.println(F("  No ethernet connection"));
+  }
+
+  return status == 1 ? true : false;
+}
+
+/*-------- MQTT broker interaction ----------*/
+void mqttSetupSubscriptions()
+{
+  mqttSubscribe("request");
+}
+
 boolean mqttConnect() 
 {
   boolean success = mqtt.connect(mqttClientId, MQTT_USERNAME, MQTT_PASSWORD, mqttWillTopic, mqttWillQos, mqttWillRetain, mqttWillMessage); 
   if (success)
   {
-    Serial.println(F("Successfully connected to MQTT broker "));
+    Serial.println(F("  Successfully connected to MQTT broker"));
     // publish retained LWT so anything listening knows we are alive
     const byte data[] = { "connected" };
     mqtt.publish(mqttWillTopic, data, 1, mqttWillRetain);
@@ -410,7 +417,17 @@ void mqttPublish(const char* name, const char* payload)
   Serial.println(payload);
 
   // publish to the MQTT broker 
-  mqtt.publish(topic, payload);
+  boolean success = mqtt.publish(topic, payload);
+  if(!success)
+  {
+    Serial.print(F("MQTT publish failed, stete: "));
+    Serial.println(mqtt.state());
+    mqttFailCount++;
+  }
+  else
+  {
+    mqttFailCount = 0;
+  }
 }
 
 /*-------- I2C ----------*/
@@ -529,4 +546,41 @@ void hourlyTimer()
 void fiveMinsTimer()
 {
   Serial.print(F("5 min timer triggered"));
+}
+
+/*-------- Error detection ----------*/
+#define ERROR_NONE              0x00
+#define ERROR_MQTT_DISCONNECTED 0x01
+#define ERROR_MQTT_TXFAIL       0x02
+
+byte errorMonitorMQTT()
+{
+  byte errorCode = ERROR_NONE;
+
+  if(!mqtt.connected())
+  {
+    mqttDisconnectedCount++;
+    Serial.print(F("MQTT not connected, state: "));
+    Serial.print(mqtt.state());
+    Serial.print(", count: ");
+    Serial.println(mqttDisconnectedCount);
+  }
+  else
+  {
+    mqttDisconnectedCount = 0;
+  }
+
+  if (mqttDisconnectedCount > mqttDisconnectedCountLimit)
+  {
+    Serial.println(F("MQTT disconnected for too long"));
+    errorCode += ERROR_MQTT_DISCONNECTED;
+  }
+
+  if (mqttFailCount > mqttFailCountLimit)
+  {
+    Serial.println(F("MQTT too many publish failures"));
+    errorCode += ERROR_MQTT_TXFAIL;
+  }
+
+  return errorCode;
 }
