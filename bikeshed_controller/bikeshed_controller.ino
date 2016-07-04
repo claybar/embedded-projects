@@ -22,8 +22,8 @@ Within states [Dusk, Night, Dawn] motion
 #include <SPI.h>
 #include <Wire.h>
 #include <Ethernet.h>
-#include <EthernetUdp.h>
-#include <ICMPPing.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include <PubSubClient.h>
 #include <elapsedMillis.h>
 #include <TimeLib.h>
@@ -40,6 +40,7 @@ Within states [Dusk, Night, Dawn] motion
 #define MOTIONSENSORAPIN 8
 #define MOTIONSENSORBPIN 3
 #define DOORSENSORPIN 7
+#define ONEWIREPIN 5
 
 #define MAC_I2C_ADDR 0x50
 #define MAC_REG_BASE 0xFA
@@ -47,7 +48,6 @@ Within states [Dusk, Night, Dawn] motion
 // Logic of motion and door sensors
 #define MOTION LOW
 #define DOOROPEN HIGH
-
 #define ON true
 #define OFF false
 
@@ -69,17 +69,6 @@ unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // millisec
 // Used for short-term string building
 // Also used for NTP reply
 char tmpBuf[48];
-
-// Ping
-/*
-IPAddress pingAddr(MQTT_SERVER_IP);
-SOCKET pingSocket = 0;
-ICMPPing ping(pingSocket, (uint16_t)random(0, 255));
-ICMPEchoReply echoResult;
-#define PING_REQUEST_TIMEOUT_MS     2500  // 1000 to 5000?
-bool lastPingSucceeded = false;
-#define ICMPPING_ASYNCH_ENABLE
-*/
 
 // NTP
 const int NTP_PACKET_SIZE = 48;
@@ -110,6 +99,8 @@ unsigned long heartbeatTimerPrevious;
 // Hardware and protocol handlers
 EthernetClient ethernet;
 EthernetUDP udp;
+OneWire oneWire(ONEWIREPIN);
+DallasTemperature tempSensors(&oneWire);
 PubSubClient mqtt(ethernet);
 SerialCommand serialCmd;
 const unsigned int udpPort = 8888;  // local port to listen for UDP packets
@@ -153,7 +144,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   }
   else
   {
-    Serial.println(F(" -> Unrecognised message"));
+    Serial.println(F("MQTT: ??"));
   }
 
   free(p);
@@ -185,9 +176,10 @@ void setup()
 
   Serial.println(F("\nSketch ID: bikeshed_controller.ino\n"));
   
-  // initialise the SPI and i2c busses.  
+  // initialise busses: SPI, i2c, 1-wire temperature.  
   SPI.begin();
   Wire.begin();
+  tempSensors.begin();
 
   Serial.print(F("MAC: "));
   for (int i = 0 ; i < 6; i++)
@@ -196,21 +188,21 @@ void setup()
   }
   printf("%02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   
-  Serial.println(F("Connecting ethernet"));
+  Serial.println(F("ETH: connect"));
   ethernetConnect();
 
-  Serial.println(F("Setting time via NTP..."));
+  Serial.println(F("NTP: time"));
   udp.begin(udpPort);
   setSyncProvider(getNtpTime);
 
-  Serial.println(F("Connecting to MQTT broker..."));
+  Serial.println(F("MQTT: connect"));
   mqtt.setServer(mqttIP, 1883);
   mqtt.setCallback(mqtt_callback);
   mqttConnect();
   mqttSetupSubscriptions();
   
   // Setup callbacks for SerialCommand commands
-  Serial.println(F("Setting up serial port monitor..."));
+  Serial.println(F("SER: setup"));
   //sCmd.addCommand("ON",    LED_on);          // Turns LED on
   //sCmd.addCommand("OFF",   LED_off);         // Turns LED off
   //sCmd.addCommand("HELLO", sayHello);        // Echos the string argument back
@@ -314,21 +306,21 @@ void loop()
   // heartbeat
   if (heartbeatTimer > heartbeatTimerPrevious + 1000)
   {
-    Serial.println(F("tick"));
+    Serial.println(F("TICK"));
     heartbeatTimerPrevious += 1000;
 
     // Something is wrong with MQTT
     if (!ethernet.connected())
     {
       // Restart ethernet
-      Serial.println(F("Restarting ethernet"));
+      Serial.println(F("ETH: Restart"));
       ethernetConnect();
     }
 
     if (errorMonitorMQTT() > 0)
     {
       // Restart MQTT
-      Serial.println(F("Restarting MQTT"));
+      Serial.println(F("MQTT: restart"));
       mqttConnect();
       mqttSetupSubscriptions();
     }
@@ -358,12 +350,12 @@ boolean ethernetConnect()
   byte status = Ethernet.begin(mac);
   if(status == 1)
   {
-    Serial.print(F("  Assigned IP: "));
+    Serial.print(F("IP: "));
     Serial.println(Ethernet.localIP());
   }
   else
   {
-    Serial.println(F("  No ethernet connection"));
+    Serial.println(F("ETH: No conn"));
   }
 
   return status == 1 ? true : false;
@@ -380,14 +372,14 @@ boolean mqttConnect()
   boolean success = mqtt.connect(mqttClientId, MQTT_USERNAME, MQTT_PASSWORD, mqttWillTopic, mqttWillQos, mqttWillRetain, mqttWillMessage); 
   if (success)
   {
-    Serial.println(F("  Successfully connected to MQTT broker"));
+    Serial.println(F("MQTT: Conn good"));
     // publish retained LWT so anything listening knows we are alive
     const byte data[] = { "connected" };
     mqtt.publish(mqttWillTopic, data, 1, mqttWillRetain);
   }
   else
   {
-    Serial.println(F("Failed to connect to MQTT broker"));
+    Serial.println(F("MQTT: Conn failed"));
   }
   return success;
 }
@@ -398,7 +390,7 @@ void mqttSubscribe(const char* name)
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/%s", mqttTopicBase, name);
 
-  Serial.print(F("Subscribing to: "));
+  Serial.print(F("MQTT: sub: "));
   Serial.println(topic);
   
   // publish to the MQTT broker 
@@ -420,7 +412,7 @@ void mqttPublish(const char* name, const char* payload)
   boolean success = mqtt.publish(topic, payload);
   if(!success)
   {
-    Serial.print(F("MQTT publish failed, stete: "));
+    Serial.print(F("MQTT: pub failed, state: "));
     Serial.println(mqtt.state());
     mqttFailCount++;
   }
@@ -451,7 +443,7 @@ void serialMQTT()
   char *topic;
   char *payload;
 
-  Serial.println(F("Serial MQTT message received"));
+  Serial.println(F("SERRX: received"));
   topic = serialCmd.next();
   if (topic != NULL)
   {
@@ -483,23 +475,19 @@ void serialMQTT()
 
 // This gets set as the default handler, and gets called when no other command matches.
 void serialUnrecognized(const char *command) {
-  Serial.println(F("Unrecognized serial command received"));
+  Serial.println(F("SERRX: unrecognized"));
 }
-
-/*-------- NTP ----------*/
-//const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
-//byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
 
 time_t getNtpTime()
 {
   while (udp.parsePacket() > 0) ; // discard any previously received packets
-  Serial.println(F("Transmit NTP Request"));
+  //Serial.println(F("Transmit NTP Request"));
   sendNTPpacket(ntpIP);
   uint32_t beginWait = millis();
   while (millis() - beginWait < 1500) {
     int size = udp.parsePacket();
     if (size >= NTP_PACKET_SIZE) {
-      Serial.println(F("Receive NTP Response"));
+      //Serial.println(F("Receive NTP Response"));
       udp.read((byte*)tmpBuf, NTP_PACKET_SIZE);  // read packet into the buffer
       unsigned long secsSince1900;
       // convert four bytes starting at location 40 to a long integer
@@ -510,7 +498,7 @@ time_t getNtpTime()
       return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
     }
   }
-  Serial.println(F("No NTP Response :-("));
+  Serial.println(F("NTP: no resp"));
   return 0; // return 0 if unable to get the time
 }
 
@@ -540,12 +528,17 @@ void sendNTPpacket(IPAddress &address)
 /*-------- Timers ----------*/
 void hourlyTimer()
 {
-  Serial.print(F("Hourly timer triggered"));
+  Serial.println(F("TMR: 1h"));
 }
 
 void fiveMinsTimer()
 {
-  Serial.print(F("5 min timer triggered"));
+  Serial.println(F("TMR: 5min"));
+
+  Serial.println(F("1W: temp"));
+  tempSensors.requestTemperatures();
+  Serial.print(F("1W: "));
+  Serial.println(tempSensors.getTempCByIndex(0));
 }
 
 /*-------- Error detection ----------*/
@@ -560,7 +553,7 @@ byte errorMonitorMQTT()
   if(!mqtt.connected())
   {
     mqttDisconnectedCount++;
-    Serial.print(F("MQTT not connected, state: "));
+    Serial.print(F("MQTT: discon, state: "));
     Serial.print(mqtt.state());
     Serial.print(", count: ");
     Serial.println(mqttDisconnectedCount);
@@ -572,13 +565,13 @@ byte errorMonitorMQTT()
 
   if (mqttDisconnectedCount > mqttDisconnectedCountLimit)
   {
-    Serial.println(F("MQTT disconnected for too long"));
+    Serial.println(F("MQTT: discon"));
     errorCode += ERROR_MQTT_DISCONNECTED;
   }
 
   if (mqttFailCount > mqttFailCountLimit)
   {
-    Serial.println(F("MQTT too many publish failures"));
+    Serial.println(F("MQTT: pub fail"));
     errorCode += ERROR_MQTT_TXFAIL;
   }
 
