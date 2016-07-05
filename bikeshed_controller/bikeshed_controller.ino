@@ -22,8 +22,7 @@ Within states [Dusk, Night, Dawn] motion
 #include <SPI.h>
 #include <Wire.h>
 #include <Ethernet.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
+#include <Adafruit_AM2315.h>
 #include <PubSubClient.h>
 #include <elapsedMillis.h>
 #include <TimeLib.h>
@@ -40,7 +39,6 @@ Within states [Dusk, Night, Dawn] motion
 #define MOTIONSENSORAPIN 8
 #define MOTIONSENSORBPIN 3
 #define DOORSENSORPIN 7
-#define ONEWIREPIN 5
 
 #define MAC_I2C_ADDR 0x50
 #define MAC_REG_BASE 0xFA
@@ -99,8 +97,7 @@ unsigned long heartbeatTimerPrevious;
 // Hardware and protocol handlers
 EthernetClient ethernet;
 EthernetUDP udp;
-OneWire oneWire(ONEWIREPIN);
-DallasTemperature tempSensors(&oneWire);
+Adafruit_AM2315 am2315;
 PubSubClient mqtt(ethernet);
 SerialCommand serialCmd;
 const unsigned int udpPort = 8888;  // local port to listen for UDP packets
@@ -179,7 +176,9 @@ void setup()
   // initialise busses: SPI, i2c, 1-wire temperature.  
   SPI.begin();
   Wire.begin();
-  tempSensors.begin();
+  if (!am2315.begin()) {
+     Serial.println(F("HW: AM2315 sensor not found"));
+  }
 
   Serial.print(F("MAC: "));
   for (int i = 0 ; i < 6; i++)
@@ -536,10 +535,10 @@ void fiveMinsTimer()
 {
   Serial.println(F("TMR: 5min"));
 
-  Serial.println(F("1W: temp"));
-  tempSensors.requestTemperatures();
-  Serial.print(F("1W: "));
-  Serial.println(tempSensors.getTempCByIndex(0));
+  Serial.print(F("  Hum: "));
+  Serial.println(am2315.readHumidity());
+  Serial.print(F("  Temp: "));
+  Serial.println(am2315.readTemperature());
 }
 
 /*-------- Error detection ----------*/
