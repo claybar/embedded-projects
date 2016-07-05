@@ -431,7 +431,7 @@ byte readI2CRegister(byte i2c_address, byte reg)
   Wire.endTransmission();
 
   Wire.requestFrom(i2c_address, (uint8_t)1); // Read a byte
-  while(!Wire.available()) { }
+  while(!Wire.available()) { }  // DANGER - INFINITE LOOP POSSIBLE
   v = Wire.read();
   return v;
 } 
@@ -478,6 +478,7 @@ void serialUnrecognized(const char *command) {
   Serial.println(F("SERRX: unrecognized"));
 }
 
+/*-------- NTP ----------*/
 time_t getNtpTime()
 {
   while (udp.parsePacket() > 0) ; // discard any previously received packets
