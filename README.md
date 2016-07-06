@@ -42,6 +42,10 @@ Arduino-Ping https://github.com/BlakeFoster/Arduino-Ping
 
 Serial command parser https://github.com/kroimon/Arduino-SerialCommand
 
+Time and Alarms
+https://github.com/PaulStoffregen/Time
+https://github.com/PaulStoffregen/TimeAlarms
+
 ## Lighting Control
 
 Libraries

@@ -91,9 +91,6 @@ bool recentActivity = false;    // Used to track how long since motion has been 
 elapsedMillis motionTimer;
 unsigned long timerPrevious;
 
-elapsedMillis heartbeatTimer;
-unsigned long heartbeatTimerPrevious;
-
 // Hardware and protocol handlers
 EthernetClient ethernet;
 EthernetUDP udp;
@@ -177,7 +174,7 @@ void setup()
   SPI.begin();
   Wire.begin();
   if (!am2315.begin()) {
-     Serial.println(F("HW: AM2315 sensor not found"));
+    Serial.println(F("HW: AM2315 sensor not found"));
   }
 
   Serial.print(F("MAC: "));
@@ -202,15 +199,12 @@ void setup()
   
   // Setup callbacks for SerialCommand commands
   Serial.println(F("SER: setup"));
-  //sCmd.addCommand("ON",    LED_on);          // Turns LED on
-  //sCmd.addCommand("OFF",   LED_off);         // Turns LED off
-  //sCmd.addCommand("HELLO", sayHello);        // Echos the string argument back
   serialCmd.addCommand("MQTT", serialMQTT);  // Relays MQTT message using 2 parameters
   serialCmd.setDefaultHandler(serialUnrecognized);      // Handler for command that isn't matched  (says "What?")
 
   Serial.println(F("Setting alarms and timers..."));
-  Alarm.timerRepeat(60 * 60, hourlyTimer);
   Alarm.timerRepeat( 5 * 60, fiveMinsTimer);
+  Alarm.timerRepeat( 5, fiveSecTimer);
 
   // State initialisation
   recentActivity = false;
@@ -300,29 +294,6 @@ void loop()
   else
   {
     outsideLights(OFF);
-  }
-
-  // heartbeat
-  if (heartbeatTimer > heartbeatTimerPrevious + 1000)
-  {
-    Serial.println(F("TICK"));
-    heartbeatTimerPrevious += 1000;
-
-    // Something is wrong with MQTT
-    if (!ethernet.connected())
-    {
-      // Restart ethernet
-      Serial.println(F("ETH: Restart"));
-      ethernetConnect();
-    }
-
-    if (errorMonitorMQTT() > 0)
-    {
-      // Restart MQTT
-      Serial.println(F("MQTT: restart"));
-      mqttConnect();
-      mqttSetupSubscriptions();
-    }
   }
 
   // Give all the worker tasks a bit of time
@@ -526,15 +497,9 @@ void sendNTPpacket(IPAddress &address)
 }
 
 /*-------- Timers ----------*/
-void hourlyTimer()
-{
-  Serial.println(F("TMR: 1h"));
-}
-
 void fiveMinsTimer()
 {
   Serial.println(F("TMR: 5min"));
-
 
   float temp, hum;
   am2315.readTemperatureAndHumidity(temp, hum);
@@ -545,6 +510,28 @@ void fiveMinsTimer()
   Serial.print(F("  Hum: "));
   Serial.println(hum);
 }
+
+void fiveSecTimer()
+{
+  Serial.println(F("TICK"));
+
+  // Something is wrong with MQTT
+  if (!ethernet.connected())
+  {
+    // Restart ethernet
+    Serial.println(F("ETH: Restart"));
+    ethernetConnect();
+  }
+
+  if (errorMonitorMQTT() > 0)
+  {
+    // Restart MQTT
+    Serial.println(F("MQTT: restart"));
+    mqttConnect();
+    mqttSetupSubscriptions();
+  }
+}
+
 
 /*-------- Error detection ----------*/
 #define ERROR_NONE              0x00
