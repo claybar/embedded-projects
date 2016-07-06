@@ -27,6 +27,7 @@ Within states [Dusk, Night, Dawn] motion
 #include <elapsedMillis.h>
 #include <TimeLib.h>
 #include <TimeAlarms.h>
+#include <Timezone.h> 
 #include <SerialCommand.h>
 
 #include <Settings.h>
@@ -97,6 +98,8 @@ EthernetUDP udp;
 Adafruit_AM2315 am2315;
 PubSubClient mqtt(ethernet);
 SerialCommand serialCmd;
+Timezone myTZ(myDST, mySTD);
+
 const unsigned int udpPort = 8888;  // local port to listen for UDP packets
 
 void mqtt_callback(char* topic, byte* payload, unsigned int length) 
@@ -111,7 +114,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   }
   p[length] = '\0';
   
-  Serial.print(F("MQTT: message received: "));
+  Serial.print(F("MQTT: rx "));
   Serial.print(topic);
   Serial.print(F(" => "));
   Serial.print(p);
@@ -122,7 +125,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     Serial.println(F("MQTT: request received"));
     if (strcmp(p, "status") == 0)
     {
-      Serial.println(F("MQTT: Sending status"));
+      Serial.println(F("MQTT: status tx"));
     }
     
     snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -168,13 +171,13 @@ void setup()
   fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
   stdout = &serial_stdout;
 
-  Serial.println(F("\nSketch ID: bikeshed_controller.ino\n"));
+  Serial.println(F("\nbikeshed_controller.ino\n"));
   
   // initialise busses: SPI, i2c, 1-wire temperature.  
   SPI.begin();
   Wire.begin();
   if (!am2315.begin()) {
-    Serial.println(F("HW: AM2315 sensor not found"));
+    Serial.println(F("HW: AM2315 not found"));
   }
 
   Serial.print(F("MAC: "));
@@ -191,6 +194,13 @@ void setup()
   udp.begin(udpPort);
   setSyncProvider(getNtpTime);
 
+  time_t utc = now();
+  Serial.print(hour(utc));
+  time_t local = myTZ.toLocal(utc);
+  Serial.print(hour(local));
+  Serial.print(minute(local));
+  Serial.print(second(local));
+  
   Serial.println(F("MQTT: connect"));
   mqtt.setServer(mqttIP, 1883);
   mqtt.setCallback(mqtt_callback);
@@ -199,10 +209,10 @@ void setup()
   
   // Setup callbacks for SerialCommand commands
   Serial.println(F("SER: setup"));
-  serialCmd.addCommand("MQTT", serialMQTT);  // Relays MQTT message using 2 parameters
-  serialCmd.setDefaultHandler(serialUnrecognized);      // Handler for command that isn't matched  (says "What?")
+  serialCmd.addCommand("MQTT", serialMQTT);  // Relay for MQTT message using 2 parameters
+  serialCmd.setDefaultHandler(serialUnrecognized); 
 
-  Serial.println(F("Setting alarms and timers..."));
+  Serial.println(F("ALM: Setup"));
   Alarm.timerRepeat( 5 * 60, fiveMinsTimer);
   Alarm.timerRepeat( 5, fiveSecTimer);
 
@@ -344,7 +354,7 @@ boolean mqttConnect()
   {
     Serial.println(F("MQTT: Conn good"));
     // publish retained LWT so anything listening knows we are alive
-    const byte data[] = { "connected" };
+    const byte data[] = {"connected"};
     mqtt.publish(mqttWillTopic, data, 1, mqttWillRetain);
   }
   else
@@ -413,27 +423,27 @@ void serialMQTT()
   char *topic;
   char *payload;
 
-  Serial.println(F("SERRX: received"));
+  Serial.println(F("SER: rx"));
   topic = serialCmd.next();
+  Serial.print(F("  Topic: "));
   if (topic != NULL)
   {
-    Serial.print(F("  Topic: "));
     Serial.println(topic);
   }
   else
   {
-    Serial.println(F("  No topic"));
+    Serial.println(F("  None"));
   }
 
   payload = serialCmd.next();
+  Serial.print(F("  Payload: "));
   if (payload != NULL)
   {
-    Serial.print(F("  Payload: "));
     Serial.println(payload);
   }
   else
   {
-    Serial.println(F("  No payload"));
+    Serial.println(F("  None"));
   }
 
   if (topic != NULL && payload != NULL)
@@ -445,7 +455,7 @@ void serialMQTT()
 
 // This gets set as the default handler, and gets called when no other command matches.
 void serialUnrecognized(const char *command) {
-  Serial.println(F("SERRX: unrecognized"));
+  Serial.println(F("SER: ??"));
 }
 
 /*-------- NTP ----------*/
@@ -501,14 +511,29 @@ void fiveMinsTimer()
 {
   Serial.println(F("TMR: 5min"));
 
-  float temp, hum;
-  am2315.readTemperatureAndHumidity(temp, hum);
-  
-  Serial.print(F("  Temp: "));
-  Serial.println(temp);
-  
-  Serial.print(F("  Hum: "));
-  Serial.println(hum);
+  int temp, hum;
+  if (am2315.readTemperatureAndHumidity(temp, hum))
+  {
+    Serial.print(F("  Temp: "));
+    Serial.print(temp / 10);
+    Serial.print(F("."));
+    Serial.print(temp % 10);
+    Serial.println(F(" degC"));
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", temp / 10, temp % 10);
+    mqttPublish("outsideTemp", tmpBuf);
+
+    Serial.print(F("  Hum: "));
+    Serial.print(hum / 10);
+    Serial.print(F("."));
+    Serial.print(hum % 10);
+    Serial.println(F(" %"));
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", hum / 10, hum % 10);
+    mqttPublish("outsideHumidity", tmpBuf);
+  }
+  else
+  {
+    Serial.println(F("ERR: AM2315"));
+  }
 }
 
 void fiveSecTimer()

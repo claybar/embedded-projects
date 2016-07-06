@@ -46,6 +46,12 @@ Time and Alarms
 https://github.com/PaulStoffregen/Time
 https://github.com/PaulStoffregen/TimeAlarms
 
+Timezones
+https://github.com/JChristensen/Timezone
+
+AM2315 temperature and humidity sensor
+https://github.com/claybar/Adafruit_AM2315
+
 ## Lighting Control
 
 Libraries
