@@ -535,10 +535,15 @@ void fiveMinsTimer()
 {
   Serial.println(F("TMR: 5min"));
 
-  Serial.print(F("  Hum: "));
-  Serial.println(am2315.readHumidity());
+
+  float temp, hum;
+  am2315.readTemperatureAndHumidity(temp, hum);
+  
   Serial.print(F("  Temp: "));
-  Serial.println(am2315.readTemperature());
+  Serial.println(temp);
+  
+  Serial.print(F("  Hum: "));
+  Serial.println(hum);
 }
 
 /*-------- Error detection ----------*/
