@@ -120,7 +120,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   Serial.print(p);
   Serial.println();
 
-  if (strcmp(topic, "frontsteps/request") == 0)
+  if (strcmp(topic, "bikeshed/request") == 0)
   {
     Serial.println(F("MQTT: request received"));
     if (strcmp(p, "status") == 0)
@@ -135,9 +135,12 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     mqttPublish("ip", tmpBuf);
   }
-  else if (strcmp(topic, "setdimmedlevel") == 0)
+  else if (strcmp(topic, "bikeshed/set/floodoffdelay") == 0)
   {
-
+    Serial.print(F("MQTT: setfloodoffdelay = "));
+    Serial.print(p);
+    Serail.println(F("s"));
+    specificSettings.outsideLightAfterMotionTime = atol(p) * 1000;
   }
   else
   {
@@ -365,6 +368,7 @@ boolean ethernetConnect()
 void mqttSetupSubscriptions()
 {
   mqttSubscribe("request");
+  mqttSubscribe("set/#");
 }
 
 boolean mqttConnect() 
