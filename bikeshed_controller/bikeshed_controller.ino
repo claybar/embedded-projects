@@ -490,6 +490,8 @@ void fiveSecTimer()
   Serial.println(F("TICK"));
 
   // Report voltages
+  // Voltage reference connected to external 2.048V reference
+  // Each rail via a divider of 1: 4,8, or 16
   Serial.println(F("Voltages:"));
   int rail5VmV = analogRead(VOLTAGE5PIN) * 2 * 4;
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail5VmV / 1000, rail5VmV % 1000);
