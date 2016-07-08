@@ -22,7 +22,6 @@ Within states [Dusk, Night, Dawn] motion
 #include <SPI.h>
 #include <Wire.h>
 #include <Ethernet.h>
-#include <Adafruit_AM2315.h>
 #include <PubSubClient.h>
 #include <elapsedMillis.h>
 #include <TimeLib.h>
@@ -88,7 +87,6 @@ unsigned long timerPrevious;
 
 // Hardware and protocol handlers
 EthernetClient ethernet;
-Adafruit_AM2315 am2315;
 PubSubClient mqtt(ethernet);
 SerialCommand serialCmd;
 
@@ -166,10 +164,7 @@ void setup()
   // initialise busses: SPI, i2c, 1-wire temperature.  
   SPI.begin();
   Wire.begin();
-  if (!am2315.begin()) {
-    Serial.println(F("HW: AM2315 not found"));
-  }
-
+  
   Serial.print(F("MAC: "));
   for (int i = 0 ; i < 6; i++)
   {
@@ -442,30 +437,6 @@ void serialUnrecognized(const char *command) {
 void fiveMinsTimer()
 {
   Serial.println(F("TMR: 5min"));
-
-  int temp, hum;
-  if (am2315.readTemperatureAndHumidity(temp, hum))
-  {
-    Serial.print(F("  Temp: "));
-    Serial.print(temp / 10);
-    Serial.print(F("."));
-    Serial.print(temp % 10);
-    Serial.println(F(" degC"));
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", temp / 10, temp % 10);
-    mqttPublish("outsideTemp", tmpBuf);
-
-    Serial.print(F("  Hum: "));
-    Serial.print(hum / 10);
-    Serial.print(F("."));
-    Serial.print(hum % 10);
-    Serial.println(F(" %"));
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", hum / 10, hum % 10);
-    mqttPublish("outsideHumidity", tmpBuf);
-  }
-  else
-  {
-    Serial.println(F("ERR: AM2315"));
-  }
 }
 
 void fiveSecTimer()
@@ -488,7 +459,6 @@ void fiveSecTimer()
     mqttSetupSubscriptions();
   }
 }
-
 
 /*-------- Error detection ----------*/
 #define ERROR_NONE              0x00

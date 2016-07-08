@@ -1,0 +1,37 @@
+#include <Adafruit_AM2315.h>
+
+Adafruit_AM2315 am2315;
+
+setup()
+{
+    if (!am2315.begin()) {
+        Serial.println(F("HW: AM2315 not found"));
+    }
+}
+
+loop()
+{
+  int temp, hum;
+  if (am2315.readTemperatureAndHumidity(temp, hum))
+  {
+    Serial.print(F("  Temp: "));
+    Serial.print(temp / 10);
+    Serial.print(F("."));
+    Serial.print(temp % 10);
+    Serial.println(F(" degC"));
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", temp / 10, temp % 10);
+    mqttPublish("outsideTemp", tmpBuf);
+
+    Serial.print(F("  Hum: "));
+    Serial.print(hum / 10);
+    Serial.print(F("."));
+    Serial.print(hum % 10);
+    Serial.println(F(" %"));
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", hum / 10, hum % 10);
+    mqttPublish("outsideHumidity", tmpBuf);
+  }
+  else
+  {
+    Serial.println(F("ERR: AM2315"));
+  }
+}
