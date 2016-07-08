@@ -34,11 +34,18 @@ Within states [Dusk, Night, Dawn] motion
 
 // Hardware setup
 #define ACTIVITYLEDPIN 13
-#define INSIDELIGHTSPIN 9
-#define OUTSIDELIGHTSPIN 6
+#define INSIDELIGHTSPIN 6
+#define OUTSIDELIGHTSPIN 9
 #define MOTIONSENSORAPIN 8
 #define MOTIONSENSORBPIN 3
 #define DOORSENSORPIN 7
+
+// Analog pins
+#define VOLTAGE5PIN 2
+#define VOLTAGE9PIN 1
+#define VOLTAGE12PIN 0
+#define VOLTAGE24PIN 3
+#define LIGHTSENSORPIN 7
 
 #define MAC_I2C_ADDR 0x50
 #define MAC_REG_BASE 0xFA
@@ -155,6 +162,8 @@ void setup()
   pinMode(ACTIVITYLEDPIN, OUTPUT);
   pinMode(INSIDELIGHTSPIN, OUTPUT);
   pinMode(OUTSIDELIGHTSPIN, OUTPUT);
+
+  analogReference(EXTERNAL);
 
   // ensure the watchdog is disabled for now
   wdt_disable();
@@ -480,6 +489,21 @@ void fiveSecTimer()
 {
   Serial.println(F("TICK"));
 
+  // Report voltages
+  Serial.println(F("Voltages:"));
+  int rail5VmV = analogRead(VOLTAGE5PIN) * 2 * 4;
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail5VmV / 1000, rail5VmV % 1000);
+  mqttPublish("5V", tmpBuf);
+  int rail9VmV = analogRead(VOLTAGE9PIN) * 2 * 8;
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail9VmV / 1000, rail9VmV % 1000);
+  mqttPublish("9V", tmpBuf);
+  int rail12VmV = analogRead(VOLTAGE12PIN) * 2 * 8;
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail12VmV / 1000, rail12VmV % 1000);
+  mqttPublish("12V", tmpBuf);
+  int rail24VmV = analogRead(VOLTAGE24PIN) * 2 * 16;
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail24VmV / 1000, rail24VmV % 1000);
+  mqttPublish("24V", tmpBuf);
+  
   // Something is wrong with MQTT
   if (!ethernet.connected())
   {
