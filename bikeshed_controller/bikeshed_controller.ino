@@ -27,6 +27,7 @@ Within states [Dusk, Night, Dawn] motion
 #include <TimeLib.h>
 #include <TimeAlarms.h>
 #include <SerialCommand.h>
+#include <EEPROMex.h>
 
 #include <Settings.h>
 #include <Secrets.h>
@@ -49,10 +50,10 @@ Within states [Dusk, Night, Dawn] motion
 #define OFF false
 
 // MQTT setup
-#define mqttClientId "bikeshed"
-#define mqttTopicBase "bikeshed"
-#define mqttWillTopic "clients/bikeshed"
-#define mqttWillMessage "unexpected exit"
+//#define mqttClientId "bikeshed"
+//#define mqttTopicBase "bikeshed"
+//#define mqttWillTopic "clients/bikeshed"
+//#define mqttWillMessage "unexpected exit"
 const int mqttWillQos = 0;
 const int mqttWillRetain = 1;
 int mqttFailCount = 0;
@@ -60,8 +61,12 @@ int mqttDisconnectedCount = 0;
 const int mqttFailCountLimit = 5;
 const int mqttDisconnectedCountLimit = 5;
 
+// Settings storage
+commonSettings0_t commonSettings;
+bikeshedControllerSettings0_t specificSettings;
+
 // Defaults, some can be set later via MQTT
-unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
+//unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
 
 // Used for short-term string building
 char tmpBuf[48];
@@ -159,12 +164,44 @@ void setup()
   fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
   stdout = &serial_stdout;
 
-  Serial.println(F("\nbikeshed_controller.ino\n"));
-  
   // initialise busses: SPI, i2c, 1-wire temperature.  
   SPI.begin();
   Wire.begin();
   
+  // Read settings from EEPROM
+  uint8_t settingsVer = EEPROM.readByte(0);
+  Serial.print(F("EEP: Read common settings ver: "));
+  Serial.println(settingsVer);
+  if (settingsVer == 0)
+  {
+    EEPROM.readBlock(0, commonSettings);
+  }
+  else
+  {
+    Serial.println(F("EEP: Unknown common settings, defaulting"));
+    strcpy(commonSettings.deviceName, "bikeshed");
+    //commonSettings.mqttClientId = "bikeshed";
+    strcpy(commonSettings.mqttTopicBase, "bikeshed");
+    strcpy(commonSettings.mqttWillTopic, "clients/bikeshed");
+    strcpy(commonSettings.mqttWillMessage, "unexpected exit");
+  }
+
+  settingsVer = EEPROM.readByte(512);
+  Serial.print(F("EEP: Read specific settings ver: "));
+  Serial.println(settingsVer);
+  if (settingsVer == 0)
+  {
+    EEPROM.readBlock(512, specificSettings);
+  }
+  else
+  {
+    Serial.println(F("EEP: Unknown specific settings, defaulting"));
+    specificSettings.outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
+  }
+
+  Serial.print(F("Device Name: "));
+  Serial.println(commonSettings.deviceName);
+
   Serial.print(F("MAC: "));
   for (int i = 0 ; i < 6; i++)
   {
@@ -247,7 +284,7 @@ void loop()
     // Test if there has been recent motion and it has been gone for a while
     if (recentActivity)
     {
-      if (motionTimer > outsideLightAfterMotionTime)
+      if (motionTimer > specificSettings.outsideLightAfterMotionTime)
       {
         recentActivity = false;
 
@@ -260,7 +297,7 @@ void loop()
         {
           Serial.print(motionTimer / 1000);
           Serial.print(" of ");
-          Serial.println(outsideLightAfterMotionTime / 1000);
+          Serial.println(specificSettings.outsideLightAfterMotionTime / 1000);
 
           timerPrevious += 1000;
         }
@@ -323,13 +360,13 @@ void mqttSetupSubscriptions()
 
 boolean mqttConnect() 
 {
-  boolean success = mqtt.connect(mqttClientId, MQTT_USERNAME, MQTT_PASSWORD, mqttWillTopic, mqttWillQos, mqttWillRetain, mqttWillMessage); 
+  boolean success = mqtt.connect(commonSettings.deviceName, MQTT_USERNAME, MQTT_PASSWORD, commonSettings.mqttWillTopic, mqttWillQos, mqttWillRetain, commonSettings.mqttWillMessage); 
   if (success)
   {
     Serial.println(F("MQTT: Conn good"));
     // publish retained LWT so anything listening knows we are alive
     const byte data[] = {"connected"};
-    mqtt.publish(mqttWillTopic, data, 1, mqttWillRetain);
+    mqtt.publish(commonSettings.mqttWillTopic, data, 1, mqttWillRetain);
   }
   else
   {
@@ -342,7 +379,7 @@ void mqttSubscribe(const char* name)
 {
   // build the MQTT topic: mqttTopicBase/name
   char topic[64];
-  snprintf(topic, sizeof(topic), "%s/%s", mqttTopicBase, name);
+  snprintf(topic, sizeof(topic), "%s/%s", commonSettings.mqttTopicBase, name);
 
   Serial.print(F("MQTT: sub: "));
   Serial.println(topic);
@@ -355,7 +392,7 @@ void mqttPublish(const char* name, const char* payload)
 {
   // build the MQTT topic: mqttTopicBase/name
   char topic[64];
-  snprintf(topic, sizeof(topic), "%s/status/%s", mqttTopicBase, name);
+  snprintf(topic, sizeof(topic), "%s/status/%s", commonSettings.mqttTopicBase, name);
 
   Serial.print(F("MQTT: "));
   Serial.print(topic);

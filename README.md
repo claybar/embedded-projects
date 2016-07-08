@@ -38,6 +38,9 @@ https://github.com/Imroy/pubsubclient/archive/master.zip
 
 ## Common libraries
 
+EEPROM storage
+https://github.com/thijse/Arduino-EEPROMEx
+
 Arduino-Ping https://github.com/BlakeFoster/Arduino-Ping
 
 Serial command parser https://github.com/kroimon/Arduino-SerialCommand
