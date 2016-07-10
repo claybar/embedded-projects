@@ -143,6 +143,27 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     Serial.println(F("s"));
     specificSettings.outsideLightAfterMotionTime = atol(p) * 1000;
   }
+  else if (strcmp(topic, "bikeshed/set/sunlightthreshold") == 0)
+  {
+    int v = atoi(p);
+    if (v >= 0 && v <= 1023)
+    {
+      Serial.print(F("MQTT: sunlightthreshold = "));
+      Serial.println(p);
+      specificSettings.sunlightThreshold = v;
+    }
+    else
+    {
+      Serial.print(F("MQTT: error, sunlightthreshold = "));
+      Serial.println(p);
+    }
+  }
+  else if (strcmp(topic, "bikeshed/set/retain") == 0)
+  {
+    Serial.print(F("MQTT: Retaining settings in EEPROM"));
+    EEPROM.updateBlock(0, commonSettings);
+    EEPROM.updateBlock(512, specificSettings);
+  }
   else
   {
     Serial.println(F("MQTT: ??"));
@@ -285,15 +306,15 @@ void loop()
     { 
       Serial.println(F("Motion detected, sensor A"));
       recentActivity = true;
-      outsideLights(ON); 
       mqttPublish("motion", "detected-ch1");
+      outsideLights(ON); 
     }
     if (motionBState != previousMotionBState)
     { 
       Serial.println(F("Motion detected, sensor B"));
       recentActivity = true;
-      outsideLights(ON); 
       mqttPublish("motion", "detected-ch2");
+      outsideLights(ON); 
     }
   }
   else  // Sensors all inactive, start the countdown
@@ -306,8 +327,8 @@ void loop()
         recentActivity = false;
 
         Serial.println(F("Motion timer expired"));
-        outsideLights(OFF); 
         mqttPublish("motion", "gone");
+        outsideLights(OFF); 
       }
       else
       {
