@@ -51,7 +51,7 @@ Within states [Dusk, Night, Dawn] motion
 #define MAC_REG_BASE 0xFA
 
 // Logic of motion and door sensors
-#define MOTION LOW
+#define MOTION HIGH
 #define DOOROPEN HIGH
 #define ON true
 #define OFF false
@@ -93,6 +93,7 @@ bool previousMotionAState = false;
 bool previousMotionBState = false;
 bool previousDoorState = false;
 bool recentActivity = false;    // Used to track how long since motion has been detected
+int lightLevel;
 
 elapsedMillis motionTimer;
 unsigned long timerPrevious;
@@ -139,7 +140,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   {
     Serial.print(F("MQTT: setfloodoffdelay = "));
     Serial.print(p);
-    Serail.println(F("s"));
+    Serial.println(F("s"));
     specificSettings.outsideLightAfterMotionTime = atol(p) * 1000;
   }
   else
@@ -159,9 +160,9 @@ int serial_putchar(char c, FILE* f) {
 void setup()
 {
   // Pin IO setup
-  pinMode(MOTIONSENSORAPIN, INPUT_PULLUP);
-  pinMode(MOTIONSENSORBPIN, INPUT_PULLUP);
-  pinMode(DOORSENSORPIN, INPUT_PULLUP);
+  pinMode(MOTIONSENSORAPIN, INPUT);  // 12k pulldown resistor
+  pinMode(MOTIONSENSORBPIN, INPUT);  // 12k pulldown resistor
+  pinMode(DOORSENSORPIN, INPUT_PULLUP);  // Also 12k pullup resistor
   pinMode(ACTIVITYLEDPIN, OUTPUT);
   pinMode(INSIDELIGHTSPIN, OUTPUT);
   pinMode(OUTSIDELIGHTSPIN, OUTPUT);
@@ -209,6 +210,7 @@ void setup()
   {
     Serial.println(F("EEP: Unknown specific settings, defaulting"));
     specificSettings.outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
+    specificSettings.sunlightThreshold = 511;  // Lights on if reading under this
   }
 
   Serial.print(F("Device Name: "));
@@ -270,24 +272,27 @@ void loop()
     }
   }
   
-  // While motion present or door is open, keep reseting the countdown timer.
+  // While motion present or door is open, keep resetting the countdown timer.
   // Fire messages only on positive edges
   if (motionAState == MOTION || motionBState == MOTION || doorState == DOOROPEN)
   {
     // Reset timer and log presence of motion
     motionTimer = 0;
     timerPrevious = 0;
-    recentActivity = true;
-
+    
     // Fire messages on positive edges
     if (motionAState != previousMotionAState)
     { 
       Serial.println(F("Motion detected, sensor A"));
+      recentActivity = true;
+      outsideLights(ON); 
       mqttPublish("motion", "detected-ch1");
     }
     if (motionBState != previousMotionBState)
     { 
       Serial.println(F("Motion detected, sensor B"));
+      recentActivity = true;
+      outsideLights(ON); 
       mqttPublish("motion", "detected-ch2");
     }
   }
@@ -301,6 +306,7 @@ void loop()
         recentActivity = false;
 
         Serial.println(F("Motion timer expired"));
+        outsideLights(OFF); 
         mqttPublish("motion", "gone");
       }
       else
@@ -319,16 +325,6 @@ void loop()
   previousMotionAState = motionAState;
   previousMotionBState = motionBState;
 
-  // Add in time-of-day to this logic
-  if (recentActivity)
-  {
-    outsideLights(ON);
-  }
-  else
-  {
-    outsideLights(OFF);
-  }
-
   // Give all the worker tasks a bit of time
   Ethernet.maintain();
   serialCmd.readSerial();
@@ -337,14 +333,29 @@ void loop()
 }
 
 /*-------- Hardware Abstraction ----------*/
+// Lights only turn on if light level dark enough
 void insideLights(bool state)
 {
-  digitalWrite(INSIDELIGHTSPIN, state);
+  bool testedState = OFF;
+  // Only test the light level when turning on the lights
+  if (state == ON && lightLevel < specificSettings.sunlightThreshold)
+  {
+    testedState = ON;
+  }
+  mqttPublish("insidelights", testedState == ON ? "on" : "off");
+  digitalWrite(INSIDELIGHTSPIN, testedState);
 }
 
 void outsideLights(bool state)
 {
-  digitalWrite(OUTSIDELIGHTSPIN, state);
+  bool testedState = OFF;
+  // Only test the light level when turning on the lights
+  if (state == ON && lightLevel < specificSettings.sunlightThreshold)
+  {
+    testedState = ON;
+  }
+  mqttPublish("outsidelights", testedState == ON ? "on" : "off");
+  digitalWrite(OUTSIDELIGHTSPIN, testedState);
 }
 
 /*-------- MQTT broker interaction ----------*/
@@ -492,6 +503,11 @@ void fiveMinsTimer()
 void fiveSecTimer()
 {
   Serial.println(F("TICK"));
+
+  // Measure and store light level
+  lightLevel = analogRead(LIGHTSENSORPIN);
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d", lightLevel);
+  mqttPublish("sunlight", tmpBuf);
 
   // Report voltages
   // Voltage reference connected to external 2.048V reference
