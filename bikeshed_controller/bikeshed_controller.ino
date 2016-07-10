@@ -57,10 +57,6 @@ Within states [Dusk, Night, Dawn] motion
 #define OFF false
 
 // MQTT setup
-//#define mqttClientId "bikeshed"
-//#define mqttTopicBase "bikeshed"
-//#define mqttWillTopic "clients/bikeshed"
-//#define mqttWillMessage "unexpected exit"
 const int mqttWillQos = 0;
 const int mqttWillRetain = 1;
 int mqttFailCount = 0;
@@ -135,6 +131,27 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     IPAddress ip = Ethernet.localIP();
     snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     mqttPublish("ip", tmpBuf);
+    
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d", commonSettings.version);
+    mqttPublish("commonsettingsversion", tmpBuf);
+    /*
+    snprintf(tmpBuf, sizeof(tmpBuf), "%s", commonSettings.deviceName);
+    mqttPublish("devicename", tmpBuf);
+    snprintf(tmpBuf, sizeof(tmpBuf), "%s", commonSettings.mqttTopicBase);
+    mqttPublish("mqttTopicBase", tmpBuf);
+    snprintf(tmpBuf, sizeof(tmpBuf), "%s", commonSettings.mqttWillTopic);
+    mqttPublish("mqttWillTopic", tmpBuf);
+    snprintf(tmpBuf, sizeof(tmpBuf), "%s", commonSettings.mqttWillMessage);
+    mqttPublish("mqttWillMessage", tmpBuf);
+    */
+    
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.version);
+    mqttPublish("specificsettingsversion", tmpBuf);
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.outsideLightAfterMotionTime);
+    mqttPublish("floodoffdelay", tmpBuf);
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.sunlightThreshold);
+    mqttPublish("sunlightthreshold", tmpBuf);
+     
   }
   else if (strcmp(topic, "bikeshed/set/floodoffdelay") == 0)
   {
@@ -188,6 +205,7 @@ void setup()
   pinMode(INSIDELIGHTSPIN, OUTPUT);
   pinMode(OUTSIDELIGHTSPIN, OUTPUT);
 
+  // ADC reference connected to 2.048V
   analogReference(EXTERNAL);
 
   // ensure the watchdog is disabled for now
@@ -212,9 +230,8 @@ void setup()
   }
   else
   {
-    Serial.println(F("EEP: Unknown common settings, defaulting"));
+    Serial.println(F("EEP: Default common settings"));
     strcpy(commonSettings.deviceName, "bikeshed");
-    //commonSettings.mqttClientId = "bikeshed";
     strcpy(commonSettings.mqttTopicBase, "bikeshed");
     strcpy(commonSettings.mqttWillTopic, "clients/bikeshed");
     strcpy(commonSettings.mqttWillMessage, "unexpected exit");
@@ -229,7 +246,7 @@ void setup()
   }
   else
   {
-    Serial.println(F("EEP: Unknown specific settings, defaulting"));
+    Serial.println(F("EEP: Default specific settings"));
     specificSettings.outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
     specificSettings.sunlightThreshold = 511;  // Lights on if reading under this
   }
@@ -533,7 +550,6 @@ void fiveSecTimer()
   // Report voltages
   // Voltage reference connected to external 2.048V reference
   // Each rail via a divider of 1: 4,8, or 16
-  Serial.println(F("Voltages:"));
   int rail5VmV = analogRead(VOLTAGE5PIN) * 2 * 4;
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail5VmV / 1000, rail5VmV % 1000);
   mqttPublish("5V", tmpBuf);
