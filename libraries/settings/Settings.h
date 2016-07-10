@@ -13,4 +13,5 @@ struct bikeshedControllerSettings0_t
 {
   const uint8_t version = 0;
   unsigned long outsideLightAfterMotionTime;  // milliseconds
+  uint16_t sunlightThreshold;  // level of sunlight to turn lights on
 };
