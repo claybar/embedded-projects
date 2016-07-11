@@ -68,9 +68,6 @@ const int mqttDisconnectedCountLimit = 5;
 commonSettings0_t commonSettings;
 bikeshedControllerSettings0_t specificSettings;
 
-// Defaults, some can be set later via MQTT
-//unsigned long outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
-
 // Used for short-term string building
 char tmpBuf[48];
 
@@ -272,12 +269,12 @@ void setup()
   
   // Setup callbacks for SerialCommand commands
   Serial.println(F("SER: setup"));
-  serialCmd.addCommand("MQTT", serialMQTT);  // Relay for MQTT message using 2 parameters
+  serialCmd.addCommand("MQTT", serialMQTTRelay);  // Relay for MQTT message using 2 parameters
   serialCmd.setDefaultHandler(serialUnrecognized); 
 
   Serial.println(F("ALM: Setup"));
-  Alarm.timerRepeat( 5 * 60, fiveMinsTimer);
-  Alarm.timerRepeat( 5, fiveSecTimer);
+  //Alarm.timerRepeat( 5 * 60, fiveMinsTimer);
+  Alarm.timerRepeat( 6, statusUpdateTimer);  // Status sent 10x per minute
 
   // State initialisation
   recentActivity = false;
@@ -450,19 +447,24 @@ void mqttSubscribe(const char* name)
   mqtt.subscribe(topic);
 }
 
+// Prepends the MQTT topic: mqttTopicBase/
 void mqttPublish(const char* name, const char* payload)
 {
-  // build the MQTT topic: mqttTopicBase/name
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/status/%s", commonSettings.mqttTopicBase, name);
 
+  mqttPublishRelay(topic, payload);
+}
+
+void mqttPublishRelay(const char* name, const char* payload)
+{
   Serial.print(F("MQTT: "));
-  Serial.print(topic);
+  Serial.print(name);
   Serial.print(F(" "));
   Serial.println(payload);
 
   // publish to the MQTT broker 
-  boolean success = mqtt.publish(topic, payload);
+  boolean success = mqtt.publish(name, payload);
   if(!success)
   {
     Serial.print(F("MQTT: pub failed, state: "));
@@ -490,7 +492,7 @@ byte readI2CRegister(byte i2c_address, byte reg)
 } 
 
 /*-------- Serial Monitor ----------*/
-void serialMQTT()
+void serialMQTTRelay()
 {
   //int aNumber;
   char *topic;
@@ -522,7 +524,7 @@ void serialMQTT()
   if (topic != NULL && payload != NULL)
   {
     // Send a MQTT message
-    mqttPublish(topic, payload);
+    mqttPublishRelay(topic, payload);
   }
 }
 
@@ -533,12 +535,7 @@ void serialUnrecognized(const char *command) {
 
 
 /*-------- Timers ----------*/
-void fiveMinsTimer()
-{
-  Serial.println(F("TMR: 5min"));
-}
-
-void fiveSecTimer()
+void statusUpdateTimer()
 {
   Serial.println(F("TICK"));
 
