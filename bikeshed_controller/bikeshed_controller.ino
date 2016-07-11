@@ -86,7 +86,7 @@ bool previousMotionAState = false;
 bool previousMotionBState = false;
 bool previousDoorState = false;
 bool recentActivity = false;    // Used to track how long since motion has been detected
-int lightLevel;
+int  sunlightLevel;
 
 elapsedMillis motionTimer;
 unsigned long timerPrevious;
@@ -131,24 +131,16 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     
     snprintf(tmpBuf, sizeof(tmpBuf), "%d", commonSettings.version);
     mqttPublish("commonsettingsversion", tmpBuf);
-    /*
-    snprintf(tmpBuf, sizeof(tmpBuf), "%s", commonSettings.deviceName);
-    mqttPublish("devicename", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%s", commonSettings.mqttTopicBase);
-    mqttPublish("mqttTopicBase", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%s", commonSettings.mqttWillTopic);
-    mqttPublish("mqttWillTopic", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%s", commonSettings.mqttWillMessage);
-    mqttPublish("mqttWillMessage", tmpBuf);
-    */
-    
     snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.version);
     mqttPublish("specificsettingsversion", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.outsideLightAfterMotionTime);
+    snprintf(tmpBuf, sizeof(tmpBuf), "%lu", specificSettings.outsideLightAfterMotionTime / 1000);
     mqttPublish("floodoffdelay", tmpBuf);
     snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.sunlightThreshold);
     mqttPublish("sunlightthreshold", tmpBuf);
-     
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.insideLightsBrightness);
+    mqttPublish("insidelightsbrightness", tmpBuf);
+    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.outsideLightsBrightness);
+    mqttPublish("outsidelightsbrightness", tmpBuf);   
   }
   else if (strcmp(topic, "bikeshed/set/floodoffdelay") == 0)
   {
@@ -177,6 +169,46 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     Serial.print(F("MQTT: Retaining settings in EEPROM"));
     EEPROM.updateBlock(0, commonSettings);
     EEPROM.updateBlock(512, specificSettings);
+  }
+  else if (strcmp(topic, "bikeshed/set/insidelightsbrightness") == 0)
+  {
+    int v = atoi(p);
+    if (v >= 0 && v <= 255)
+    {
+      Serial.print(F("MQTT: insidelightsbrightness = "));
+      Serial.println(p);
+      specificSettings.insideLightsBrightness = v;
+      // Apply to the light output immediately if the door is open
+      if (doorState == DOOROPEN)
+      {
+        analogWrite(INSIDELIGHTSPIN, v);
+      }
+    }
+    else
+    {
+      Serial.print(F("MQTT: error, insidelightsbrightness = "));
+      Serial.println(p);
+    }
+  }
+  else if (strcmp(topic, "bikeshed/set/outsidelightsbrightness") == 0)
+  {
+    int v = atoi(p);
+    if (v >= 0 && v <= 255)
+    {
+      Serial.print(F("MQTT: outsidelightsbrightness = "));
+      Serial.println(p);
+      specificSettings.outsideLightsBrightness = v;
+      // Apply to the light output immediately if there is current activity
+      if (recentActivity) 
+      {
+        analogWrite(OUTSIDELIGHTSPIN, v);
+      }
+    }
+    else
+    {
+      Serial.print(F("MQTT: error, outsidelightsbrightness = "));
+      Serial.println(p);
+    }
   }
   else
   {
@@ -246,6 +278,8 @@ void setup()
     Serial.println(F("EEP: Default specific settings"));
     specificSettings.outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
     specificSettings.sunlightThreshold = 511;  // Lights on if reading under this
+    specificSettings.insideLightsBrightness = 127;
+    specificSettings.outsideLightsBrightness = 127; 
   }
 
   Serial.print(F("Device Name: "));
@@ -373,24 +407,40 @@ void insideLights(bool state)
 {
   bool testedState = OFF;
   // Only test the light level when turning on the lights
-  if (state == ON && lightLevel < specificSettings.sunlightThreshold)
+  if (state == ON && sunlightLevel < specificSettings.sunlightThreshold)
   {
     testedState = ON;
   }
   mqttPublish("insidelights", testedState == ON ? "on" : "off");
-  digitalWrite(INSIDELIGHTSPIN, testedState);
+  //digitalWrite(INSIDELIGHTSPIN, testedState);
+  if (testedState)
+  {
+    analogWrite(INSIDELIGHTSPIN, specificSettings.insideLightsBrightness);
+  }
+  else
+  {
+    analogWrite(INSIDELIGHTSPIN, 0);    
+  }
 }
 
 void outsideLights(bool state)
 {
   bool testedState = OFF;
   // Only test the light level when turning on the lights
-  if (state == ON && lightLevel < specificSettings.sunlightThreshold)
+  if (state == ON && sunlightLevel < specificSettings.sunlightThreshold)
   {
     testedState = ON;
   }
   mqttPublish("outsidelights", testedState == ON ? "on" : "off");
-  digitalWrite(OUTSIDELIGHTSPIN, testedState);
+  //digitalWrite(OUTSIDELIGHTSPIN, testedState);
+  if (testedState)
+  {
+    analogWrite(OUTSIDELIGHTSPIN, specificSettings.outsideLightsBrightness);
+  }
+  else
+  {
+    analogWrite(OUTSIDELIGHTSPIN, 0);    
+  }
 }
 
 /*-------- MQTT broker interaction ----------*/
@@ -540,8 +590,8 @@ void statusUpdateTimer()
   Serial.println(F("TICK"));
 
   // Measure and store light level
-  lightLevel = analogRead(LIGHTSENSORPIN);
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", lightLevel);
+  sunlightLevel = analogRead(LIGHTSENSORPIN);
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d", sunlightLevel);
   mqttPublish("sunlight", tmpBuf);
 
   // Report voltages
