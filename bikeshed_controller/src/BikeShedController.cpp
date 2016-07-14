@@ -29,9 +29,11 @@ Within states [Dusk, Night, Dawn] motion
 #include <SerialCommand.h>
 #include <EEPROMex.h>
 
-#include "elapsedMillis.h"
-#include "Settings.h"
-#include "Secrets.h"
+#include <elapsedMillis.h>
+#include <Settings.h>
+#include <Secrets.h>
+
+#include "BikeShedController.h"
 
 // Hardware setup
 #define ACTIVITYLEDPIN 13
@@ -96,23 +98,6 @@ unsigned long timerPrevious;
 EthernetClient ethernet;
 PubSubClient mqtt(ethernet);
 SerialCommand serialCmd;
-
-// Function prototpyes
-void mqtt_callback(char* topic, byte* payload, unsigned int length);
-int serial_putchar(char c, FILE* f);
-void insideLights(bool state);
-void outsideLights(bool state);
-boolean ethernetConnect();
-void mqttSetupSubscriptions();
-boolean mqttConnect();
-void mqttSubscribe(const char* name);
-void mqttPublish(const char* name, const char* payload);
-void mqttPublishRelay(const char* name, const char* payload);
-byte readI2CRegister(byte i2c_address, byte reg);
-void serialMQTTRelay();
-void serialUnrecognized(const char *command);
-void statusUpdateTimer();
-byte errorMonitorMQTT();
 
 void mqtt_callback(char* topic, byte* payload, unsigned int length)
 {
