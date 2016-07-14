@@ -18,19 +18,20 @@ Dawn -> Daytime
 Within states [Dusk, Night, Dawn] motion
 */
 
+#include <Arduino.h>
 #include <avr/wdt.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <Ethernet.h>
 #include <PubSubClient.h>
-#include <elapsedMillis.h>
 #include <TimeLib.h>
 #include <TimeAlarms.h>
 #include <SerialCommand.h>
 #include <EEPROMex.h>
 
-#include <Settings.h>
-#include <Secrets.h>
+#include "elapsedMillis.h"
+#include "Settings.h"
+#include "Secrets.h"
 
 // Hardware setup
 #define ACTIVITYLEDPIN 13
@@ -86,7 +87,7 @@ bool previousMotionAState = false;
 bool previousMotionBState = false;
 bool previousDoorState = false;
 bool recentActivity = false;    // Used to track how long since motion has been detected
-int  sunlightLevel;
+uint8_t sunlightLevel;
 
 elapsedMillis motionTimer;
 unsigned long timerPrevious;
@@ -96,18 +97,35 @@ EthernetClient ethernet;
 PubSubClient mqtt(ethernet);
 SerialCommand serialCmd;
 
-void mqtt_callback(char* topic, byte* payload, unsigned int length) 
+// Function prototpyes
+void mqtt_callback(char* topic, byte* payload, unsigned int length);
+int serial_putchar(char c, FILE* f);
+void insideLights(bool state);
+void outsideLights(bool state);
+boolean ethernetConnect();
+void mqttSetupSubscriptions();
+boolean mqttConnect();
+void mqttSubscribe(const char* name);
+void mqttPublish(const char* name, const char* payload);
+void mqttPublishRelay(const char* name, const char* payload);
+byte readI2CRegister(byte i2c_address, byte reg);
+void serialMQTTRelay();
+void serialUnrecognized(const char *command);
+void statusUpdateTimer();
+byte errorMonitorMQTT();
+
+void mqtt_callback(char* topic, byte* payload, unsigned int length)
 {
   // Allocate the correct amount of memory for the payload copy
   char* p = (char*)malloc(length + 1);
-  
+
   // Copy the payload to the new buffer
-  for (int i = 0; i < length; i++)
+  for (uint8_t i = 0; i < length; i++)
   {
     p[i] = (char)payload[i];
   }
   p[length] = '\0';
-  
+
   Serial.print(F("MQTT: rx "));
   Serial.print(topic);
   Serial.print(F(" => "));
@@ -121,14 +139,14 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     {
       Serial.println(F("MQTT: status tx"));
     }
-    
+
     snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     mqttPublish("mac", tmpBuf);
 
     IPAddress ip = Ethernet.localIP();
     snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
     mqttPublish("ip", tmpBuf);
-    
+
     snprintf(tmpBuf, sizeof(tmpBuf), "%d", commonSettings.version);
     mqttPublish("commonsettingsversion", tmpBuf);
     snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.version);
@@ -140,7 +158,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.insideLightsBrightness);
     mqttPublish("insidelightsbrightness", tmpBuf);
     snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.outsideLightsBrightness);
-    mqttPublish("outsidelightsbrightness", tmpBuf);   
+    mqttPublish("outsidelightsbrightness", tmpBuf);
   }
   else if (strcmp(topic, "bikeshed/set/floodoffdelay") == 0)
   {
@@ -199,7 +217,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
       Serial.println(p);
       specificSettings.outsideLightsBrightness = v;
       // Apply to the light output immediately if there is current activity
-      if (recentActivity) 
+      if (recentActivity)
       {
         analogWrite(OUTSIDELIGHTSPIN, v);
       }
@@ -239,16 +257,16 @@ void setup()
 
   // ensure the watchdog is disabled for now
   wdt_disable();
-  
+
   Serial.begin(115200);
   // Redirect stdout to the serial port helper
   fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
   stdout = &serial_stdout;
 
-  // initialise busses: SPI, i2c, 1-wire temperature.  
+  // initialise busses: SPI, i2c, 1-wire temperature.
   SPI.begin();
   Wire.begin();
-  
+
   // Read settings from EEPROM
   uint8_t settingsVer = EEPROM.readByte(0);
   Serial.print(F("EEP: Read common settings ver: "));
@@ -279,7 +297,7 @@ void setup()
     specificSettings.outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
     specificSettings.sunlightThreshold = 511;  // Lights on if reading under this
     specificSettings.insideLightsBrightness = 127;
-    specificSettings.outsideLightsBrightness = 127; 
+    specificSettings.outsideLightsBrightness = 127;
   }
 
   Serial.print(F("Device Name: "));
@@ -291,20 +309,20 @@ void setup()
     mac[i] = readI2CRegister(MAC_I2C_ADDR, MAC_REG_BASE + i);
   }
   printf("%02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  
+
   Serial.println(F("ETH: connect"));
   ethernetConnect();
-  
+
   Serial.println(F("MQTT: connect"));
   mqtt.setServer(mqttIP, 1883);
   mqtt.setCallback(mqtt_callback);
   mqttConnect();
   mqttSetupSubscriptions();
-  
+
   // Setup callbacks for SerialCommand commands
   Serial.println(F("SER: setup"));
   serialCmd.addCommand("MQTT", serialMQTTRelay);  // Relay for MQTT message using 2 parameters
-  serialCmd.setDefaultHandler(serialUnrecognized); 
+  serialCmd.setDefaultHandler(serialUnrecognized);
 
   Serial.println(F("ALM: Setup"));
   //Alarm.timerRepeat( 5 * 60, fiveMinsTimer);
@@ -331,7 +349,7 @@ void loop()
     {
       Serial.println(F("Door open"));
       mqttPublish("door", "open");
-      insideLights(ON); 
+      insideLights(ON);
     }
     else
     {
@@ -340,7 +358,7 @@ void loop()
       insideLights(OFF);
     }
   }
-  
+
   // While motion present or door is open, keep resetting the countdown timer.
   // Fire messages only on positive edges
   if (motionAState == MOTION || motionBState == MOTION || doorState == DOOROPEN)
@@ -348,21 +366,21 @@ void loop()
     // Reset timer and log presence of motion
     motionTimer = 0;
     timerPrevious = 0;
-    
+
     // Fire messages on positive edges
     if (motionAState != previousMotionAState)
-    { 
+    {
       Serial.println(F("Motion detected, sensor A"));
       recentActivity = true;
       mqttPublish("motion", "detected-ch1");
-      outsideLights(ON); 
+      outsideLights(ON);
     }
     if (motionBState != previousMotionBState)
-    { 
+    {
       Serial.println(F("Motion detected, sensor B"));
       recentActivity = true;
       mqttPublish("motion", "detected-ch2");
-      outsideLights(ON); 
+      outsideLights(ON);
     }
   }
   else  // Sensors all inactive, start the countdown
@@ -376,7 +394,7 @@ void loop()
 
         Serial.println(F("Motion timer expired"));
         mqttPublish("motion", "gone");
-        outsideLights(OFF); 
+        outsideLights(OFF);
       }
       else
       {
@@ -388,7 +406,7 @@ void loop()
 
           timerPrevious += 1000;
         }
-      }  
+      }
     }
   }
   previousMotionAState = motionAState;
@@ -419,7 +437,7 @@ void insideLights(bool state)
   }
   else
   {
-    analogWrite(INSIDELIGHTSPIN, 0);    
+    analogWrite(INSIDELIGHTSPIN, 0);
   }
 }
 
@@ -439,13 +457,13 @@ void outsideLights(bool state)
   }
   else
   {
-    analogWrite(OUTSIDELIGHTSPIN, 0);    
+    analogWrite(OUTSIDELIGHTSPIN, 0);
   }
 }
 
 /*-------- MQTT broker interaction ----------*/
 boolean ethernetConnect()
-{  
+{
   byte status = Ethernet.begin(mac);
   if(status == 1)
   {
@@ -467,9 +485,9 @@ void mqttSetupSubscriptions()
   mqttSubscribe("set/#");
 }
 
-boolean mqttConnect() 
+boolean mqttConnect()
 {
-  boolean success = mqtt.connect(commonSettings.deviceName, MQTT_USERNAME, MQTT_PASSWORD, commonSettings.mqttWillTopic, mqttWillQos, mqttWillRetain, commonSettings.mqttWillMessage); 
+  boolean success = mqtt.connect(commonSettings.deviceName, MQTT_USERNAME, MQTT_PASSWORD, commonSettings.mqttWillTopic, mqttWillQos, mqttWillRetain, commonSettings.mqttWillMessage);
   if (success)
   {
     Serial.println(F("MQTT: Conn good"));
@@ -492,8 +510,8 @@ void mqttSubscribe(const char* name)
 
   Serial.print(F("MQTT: sub: "));
   Serial.println(topic);
-  
-  // publish to the MQTT broker 
+
+  // publish to the MQTT broker
   mqtt.subscribe(topic);
 }
 
@@ -513,7 +531,7 @@ void mqttPublishRelay(const char* name, const char* payload)
   Serial.print(F(" "));
   Serial.println(payload);
 
-  // publish to the MQTT broker 
+  // publish to the MQTT broker
   boolean success = mqtt.publish(name, payload);
   if(!success)
   {
@@ -539,7 +557,7 @@ byte readI2CRegister(byte i2c_address, byte reg)
   while(!Wire.available()) { }  // DANGER - INFINITE LOOP POSSIBLE
   v = Wire.read();
   return v;
-} 
+}
 
 /*-------- Serial Monitor ----------*/
 void serialMQTTRelay()
@@ -609,7 +627,7 @@ void statusUpdateTimer()
   int rail24VmV = analogRead(VOLTAGE24PIN) * 2 * 16;
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail24VmV / 1000, rail24VmV % 1000);
   mqttPublish("24V", tmpBuf);
-  
+
   // Something is wrong with MQTT
   if (!ethernet.connected())
   {
