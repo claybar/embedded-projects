@@ -1,18 +1,29 @@
 #include <Arduino.h>
 
-// Function prototpyes
-void mqtt_callback(char* topic, byte* payload, unsigned int length);
+// Error detection
+#define ERROR_NONE              0x00
+#define ERROR_MQTT_DISCONNECTED 0x01
+#define ERROR_MQTT_TXFAIL       0x02
+byte errorMonitorMQTT();
+
+// Hardware interaction
+byte readI2CRegister(byte i2c_address, byte reg);
 int serial_putchar(char c, FILE* f);
 void insideLights(bool state);
 void outsideLights(bool state);
+
+// Timers
+void statusUpdateTimer();
+
+// MQTT to serial relaying
+void serialMQTTRelay();
+void serialUnrecognized(const char *command);
+
+// MQTT
 boolean ethernetConnect();
-void mqttSetupSubscriptions();
 boolean mqttConnect();
+void mqttSetupSubscriptions();
+void mqtt_callback(char* topic, byte* payload, unsigned int length);
 void mqttSubscribe(const char* name);
 void mqttPublish(const char* name, const char* payload);
 void mqttPublishRelay(const char* name, const char* payload);
-byte readI2CRegister(byte i2c_address, byte reg);
-void serialMQTTRelay();
-void serialUnrecognized(const char *command);
-void statusUpdateTimer();
-byte errorMonitorMQTT();

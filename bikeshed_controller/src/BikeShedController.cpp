@@ -630,11 +630,6 @@ void statusUpdateTimer()
   }
 }
 
-/*-------- Error detection ----------*/
-#define ERROR_NONE              0x00
-#define ERROR_MQTT_DISCONNECTED 0x01
-#define ERROR_MQTT_TXFAIL       0x02
-
 byte errorMonitorMQTT()
 {
   byte errorCode = ERROR_NONE;
