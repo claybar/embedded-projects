@@ -313,6 +313,13 @@ void setup()
   //Alarm.timerRepeat( 5 * 60, fiveMinsTimer);
   Alarm.timerRepeat( 6, statusUpdateTimer);  // Status sent 10x per minute
 
+  // enable the watchdog timer - 8s timeout
+  Serial.print(F("WDT: "));
+  Serial.print(WDTO_8S);
+  Serial.print(F(" s"));
+  wdt_enable(WDTO_8S);
+  wdt_reset();
+
   // State initialisation
   recentActivity = false;
   motionTimer = 0;
@@ -321,6 +328,8 @@ void setup()
 
 void loop()
 {
+  wdt_reset();
+
   motionAState = digitalRead(MOTIONSENSORAPIN);
   motionBState = digitalRead(MOTIONSENSORBPIN);
   doorState = digitalRead(DOORSENSORPIN);
