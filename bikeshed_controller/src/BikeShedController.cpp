@@ -317,7 +317,7 @@ void setup()
   Serial.print(F("WDT: "));
   Serial.print(WDTO_8S);
   Serial.print(F(" s"));
-  wdt_enable(WDTO_8S);
+  wdt_enable(WDT);
   wdt_reset();
 
   // State initialisation

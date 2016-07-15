@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 // Error detection
+#define WDT                     WDTO_8S
 #define ERROR_NONE              0x00
 #define ERROR_MQTT_DISCONNECTED 0x01
 #define ERROR_MQTT_TXFAIL       0x02
