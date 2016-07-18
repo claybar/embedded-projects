@@ -46,9 +46,6 @@ void loop(void)
   {
     mqttReconnect();
   }
-  mqttClient.loop();
-
-  wdt_reset();
 
   now = millis();
   if (now - lastMsg > 2000)
@@ -70,6 +67,11 @@ void loop(void)
     Serial.println(msg);
     mqttClient.publish("outTopic", msg);
   }
+
+  // Allow time for background tasks and feed the dog
+  mqttClient.loop();
+  delay(1);
+  yield();
 }
 
 void setup_wifi()
