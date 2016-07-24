@@ -54,7 +54,7 @@ Within states [Dusk, Night, Dawn] motion
 #define MAC_REG_BASE 0xFA
 
 // Logic of motion and door sensors
-#define MOTION HIGH
+#define MOTION LOW
 #define DOOROPEN HIGH
 #define ON true
 #define OFF false
@@ -230,8 +230,8 @@ int serial_putchar(char c, FILE* f) {
 void setup()
 {
   // Pin IO setup
-  pinMode(MOTIONSENSORAPIN, INPUT);  // 12k pulldown resistor
-  pinMode(MOTIONSENSORBPIN, INPUT);  // 12k pulldown resistor
+  pinMode(MOTIONSENSORAPIN, INPUT);  // 12k pullup resistor
+  pinMode(MOTIONSENSORBPIN, INPUT);  // 12k pullup resistor
   pinMode(DOORSENSORPIN, INPUT_PULLUP);  // Also 12k pullup resistor
   pinMode(ACTIVITYLEDPIN, OUTPUT);
   pinMode(INSIDELIGHTSPIN, OUTPUT);
@@ -332,6 +332,11 @@ void loop()
 
   motionAState = digitalRead(MOTIONSENSORAPIN);
   motionBState = digitalRead(MOTIONSENSORBPIN);
+  if (MOTION == LOW)
+  {
+    motionAState = !motionAState;
+    motionBState = !motionBState;
+  }
   doorState = digitalRead(DOORSENSORPIN);
 
   // Inside lights are simply controlled by the door sensor
@@ -355,7 +360,7 @@ void loop()
 
   // While motion present or door is open, keep resetting the countdown timer.
   // Fire messages only on positive edges
-  if (motionAState == MOTION || motionBState == MOTION || doorState == DOOROPEN)
+  if (motionAState == HIGH || motionBState == HIGH || doorState == DOOROPEN)
   {
     // Reset timer and log presence of motion
     motionTimer = 0;
