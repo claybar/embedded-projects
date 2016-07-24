@@ -22,12 +22,12 @@ Within states [Dusk, Night, Dawn] motion
 #include <EtherTen.h>
 #include <SPI.h>
 #include <Wire.h>
-#include <EEPROM.h>
 #include <Ethernet.h>
 #include <PubSubClient.h>
 #include <LEDFader.h>
 #include <Curve.h>
 #include <elapsedMillis.h>
+#include <EEPROMex.h>
 
 #include <Settings.h>
 #include <Secrets.h>
@@ -41,12 +41,20 @@ Within states [Dusk, Night, Dawn] motion
 #define MOTIONSENSORBPIN 6
 
 // MQTT setup
-#define mqttClientId "frontsteps"
-#define mqttTopicBase "frontsteps"
-#define mqttWillTopic "clients/frontsteps"
-#define mqttWillMessage "unexpected exit"
+//#define mqttClientId "frontsteps"
+//#define mqttTopicBase "frontsteps"
+//#define mqttWillTopic "clients/frontsteps"
+//#define mqttWillMessage "unexpected exit"
 const int mqttWillQos = 0;
 const int mqttWillRetain = 1;
+int mqttFailCount = 0;
+int mqttDisconnectedCount = 0;
+const int mqttFailCountLimit = 5;
+const int mqttDisconnectedCountLimit = 5;
+
+// Settings storage
+commonSettings0_t commonSettings;
+frontstepsControllerSettings0_t specificSettings;
 
 // Used for short-term string building
 char tmpBuf[33];
@@ -58,11 +66,13 @@ byte mac[] = { 0, 0, 0, 0, 0, 0 };
 IPAddress mqttIP(MQTT_SERVER_IP);
 
 // Defaults, some can be set later via MQTT
+/*
 int lightingLevelOff = 0; // percentage
 int lightingLevelAmbient = 10; // percentage
 int lightingLevelBright = 50;  // percentage
 int lightingChangeTime = 5000;  // milliseconds
 unsigned long lightingAfterMotionTime = 300000; // 5 * 60 * 1000;  // milliseconds
+*/
 
 int motionAState = 0;
 int motionBState = 0;
@@ -154,13 +164,46 @@ void setup()
   fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
   stdout = &serial_stdout;
 
-  Serial.println(F("\nSketch ID: frontsteps_lighting.ino\n"));
-
-  // initialise the SPI bus.
+  // initialise the SPI and i2c bus.
   SPI.begin();
-
-  // Join i2c bus as master
   Wire.begin();
+
+  // Read settings from EEPROM
+  uint8_t settingsVer = EEPROM.readByte(0);
+  Serial.print(F("EEP: Read common settings ver: "));
+  Serial.println(settingsVer);
+  if (settingsVer == 0)
+  {
+    EEPROM.readBlock(0, commonSettings);
+  }
+  else
+  {
+    Serial.println(F("EEP: Default common settings"));
+    strcpy(commonSettings.deviceName, "frontsteps");
+    strcpy(commonSettings.mqttTopicBase, "frontsteps");
+    strcpy(commonSettings.mqttWillTopic, "clients/frontsteps");
+    strcpy(commonSettings.mqttWillMessage, "unexpected exit");
+  }
+
+  settingsVer = EEPROM.readByte(512);
+  Serial.print(F("EEP: Read specific settings ver: "));
+  Serial.println(settingsVer);
+  if (settingsVer == 0)
+  {
+    EEPROM.readBlock(512, specificSettings);
+  }
+  else
+  {
+    Serial.println(F("EEP: Default specific settings"));
+    specificSettings.lightingAfterMotionTime = 300000; // 5 * 60 * 1000;  // milliseconds
+    specificSettings.lightingLevelOff = 0;
+    specificSettings.lightingLevelAmbient = 10;
+    specificSettings.lightingLevelBright = 50;
+    specificSettings.lightingChangeTime = 5000;  // milliseconds
+  }
+
+  Serial.print(F("Device Name: "));
+  Serial.println(commonSettings.deviceName);
 
   Serial.print(F("MAC: "));
   for (int i = 0 ; i < 6; i++)
@@ -176,7 +219,6 @@ void setup()
     Serial.print(F("."));
   }
   Serial.println(Ethernet.localIP());
-
 
   Serial.println(F("Connecting to MQTT broker..."));
   mqtt.setServer(mqttIP, 1883);
@@ -219,7 +261,7 @@ void loop()
   else  // Sensors low
   {
     // Test if there has been recent motion and the it has been gone for a while
-    if (recentMotion && (motionTimer > lightingAfterMotionTime))
+    if (recentMotion && (motionTimer > specificSettings.lightingAfterMotionTime))
     {
       recentMotion = false;
 
@@ -229,7 +271,6 @@ void loop()
   }
   previousMotionAState = motionAState;
   previousMotionBState = motionBState;
-
 
   // Add in time-of-day to this logic
   if (recentMotion)
@@ -248,29 +289,28 @@ void loop()
 
 void lightingOff()
 {
-  lightingLed.fade(lightingLevelOff, lightingChangeTime);
+  lightingLed.fade(specificSettings.lightingLevelOff, specificSettings.lightingChangeTime);
 }
 
 void lightingAmbient()
 {
-  lightingLed.fade(lightingLevelAmbient, lightingChangeTime);
+  lightingLed.fade(specificSettings.lightingLevelAmbient, specificSettings.lightingChangeTime);
 }
 
 void lightingBright()
 {
-  lightingLed.fade(lightingLevelBright, lightingChangeTime);
+  lightingLed.fade(specificSettings.lightingLevelBright, specificSettings.lightingChangeTime);
 }
-
 
 boolean mqttConnect()
 {
-  boolean success = mqtt.connect(mqttClientId, MQTT_USERNAME, MQTT_PASSWORD, mqttWillTopic, mqttWillQos, mqttWillRetain, mqttWillMessage);
+  boolean success = mqtt.connect(commonSettings.deviceName, MQTT_USERNAME, MQTT_PASSWORD, commonSettings.mqttWillTopic, mqttWillQos, mqttWillRetain, commonSettings.mqttWillMessage);
   if (success)
   {
     Serial.println(F("Successfully connected to MQTT broker "));
     // publish retained LWT so anything listening knows we are alive
     byte data[] = { "connected" };
-    mqtt.publish(mqttWillTopic, data, 1, mqttWillRetain);
+    mqtt.publish(commonSettings.mqttWillTopic, data, 1, mqttWillRetain);
   }
   else
   {
@@ -283,7 +323,7 @@ void mqttSubscribe(const char* name)
 {
   // build the MQTT topic: mqttTopicBase/name
   char topic[64];
-  snprintf(topic, sizeof(topic), "%s/%s", mqttTopicBase, name);
+  snprintf(topic, sizeof(topic), "%s/%s", commonSettings.mqttTopicBase, name);
 
   Serial.print(F("Subscribing to: "));
   Serial.println(topic);
@@ -296,14 +336,25 @@ void mqttPublish(const char* name, const char* payload)
 {
   // build the MQTT topic: mqttTopicBase/name
   char topic[64];
-  snprintf(topic, sizeof(topic), "%s/status/%s", mqttTopicBase, name);
+  snprintf(topic, sizeof(topic), "%s/status/%s", commonSettings.mqttTopicBase, name);
 
   Serial.print(topic);
   Serial.print(F(" "));
   Serial.println(payload);
 
+
   // publish to the MQTT broker
-  mqtt.publish(topic, payload);
+  boolean success = mqtt.publish(topic, payload);
+  if(!success)
+  {
+    Serial.print(F("MQTT: pub failed, state: "));
+    Serial.println(mqtt.state());
+    mqttFailCount++;
+  }
+  else
+  {
+    mqttFailCount = 0;
+  }
 }
 
 byte readI2CRegister(byte i2c_address, byte reg)
