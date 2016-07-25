@@ -117,7 +117,10 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   Serial.print(p);
   Serial.println();
 
-  if (strcmp(topic, "bikeshed/request") == 0)
+  // Strip off the "bikeshed/" bit
+  char* topicStrip = topic + strlen(commonSettings.mqttTopicBase) + 1;
+
+  if (strcmp(topicStrip , "request") == 0)
   {
     Serial.println(F("MQTT: request received"));
     if (strcmp(p, "status") == 0)
@@ -145,14 +148,20 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.outsideLightsBrightness);
     mqttPublish("outsidelightsbrightness", tmpBuf);
   }
-  else if (strcmp(topic, "bikeshed/set/floodoffdelay") == 0)
+  else if (strcmp(topicStrip, "retain") == 0)
+  {
+    Serial.print(F("MQTT: Retaining settings in EEPROM"));
+    EEPROM.updateBlock(0, commonSettings);
+    EEPROM.updateBlock(512, specificSettings);
+  }
+  else if (strcmp(topicStrip, "floodoffdelay/set") == 0)
   {
     Serial.print(F("MQTT: setfloodoffdelay = "));
     Serial.print(p);
     Serial.println(F("s"));
     specificSettings.outsideLightAfterMotionTime = atol(p) * 1000;
   }
-  else if (strcmp(topic, "bikeshed/set/sunlightthreshold") == 0)
+  else if (strcmp(topicStrip, "sunlightthreshold/set") == 0)
   {
     int v = atoi(p);
     if (v >= 0 && v <= 1023)
@@ -167,13 +176,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
       Serial.println(p);
     }
   }
-  else if (strcmp(topic, "bikeshed/set/retain") == 0)
-  {
-    Serial.print(F("MQTT: Retaining settings in EEPROM"));
-    EEPROM.updateBlock(0, commonSettings);
-    EEPROM.updateBlock(512, specificSettings);
-  }
-  else if (strcmp(topic, "bikeshed/set/insidelightsbrightness") == 0)
+  else if (strcmp(topicStrip, "insidelightsbrightness/set") == 0)
   {
     int v = atoi(p);
     if (v >= 0 && v <= 255)
@@ -193,7 +196,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
       Serial.println(p);
     }
   }
-  else if (strcmp(topic, "bikeshed/set/outsidelightsbrightness") == 0)
+  else if (strcmp(topicStrip, "outsidelightsbrightness/set") == 0)
   {
     int v = atoi(p);
     if (v >= 0 && v <= 255)
@@ -523,7 +526,7 @@ void mqttSubscribe(const char* name)
 void mqttPublish(const char* name, const char* payload)
 {
   char topic[64];
-  snprintf(topic, sizeof(topic), "%s/status/%s", commonSettings.mqttTopicBase, name);
+  snprintf(topic, sizeof(topic), "%s/%s", commonSettings.mqttTopicBase, name);
 
   mqttPublishRelay(topic, payload);
 }
