@@ -28,3 +28,14 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length);
 void mqttSubscribe(const char* name);
 void mqttPublish(const char* name, const char* payload);
 void mqttPublishRelay(const char* name, const char* payload);
+
+// Status via MQTT
+enum Parameter
+{
+  MAC, IP,
+  SPECIFICSETTINGSVER, COMMONSETTINGSVER,
+  INSIDEBRIGHTNESS,
+  OUTSIDEBRIGHTNESS, OUTSIDEONTIME,
+  SUNLIGHTTHRESHOLD
+};
+void sendParameterViaMQTT(Parameter p);

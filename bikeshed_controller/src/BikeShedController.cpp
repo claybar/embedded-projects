@@ -99,6 +99,26 @@ EthernetClient ethernet;
 PubSubClient mqtt(ethernet);
 SerialCommand serialCmd;
 
+/*
+device/bikeshed/commonSettings/version
+device/bikeshed/specificSettings/version
+
+devices/bikeshed/insideLights/on
+devices/bikeshed/insideLights/brightness</set>
+
+devices/bikeshed/outsideLights/on
+devices/bikeshed/outsideLights/brightness</set>
+devices/bikeshed/outsideLights/onTime</set>
+
+devices/bikeshed/motion/motionA
+devices/bikeshed/motion/motionB
+devices/bikeshed/door/open
+
+device/bikeshed/sunlightLevel/threshold</set>
+
+device/bikeshed/settings/request/</set>
+*/
+
 void mqtt_callback(char* topic, byte* payload, unsigned int length)
 {
   // Allocate the correct amount of memory for the payload copy
@@ -125,55 +145,16 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
       Serial.println(F("MQTT: status tx"));
     }
 
-    snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    mqttPublish("mac", tmpBuf);
-
-    IPAddress ip = Ethernet.localIP();
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-    mqttPublish("ip", tmpBuf);
-
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", commonSettings.version);
-    mqttPublish("commonsettingsversion", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.version);
-    mqttPublish("specificsettingsversion", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%lu", specificSettings.outsideLightAfterMotionTime / 1000);
-    mqttPublish("floodoffdelay", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.sunlightThreshold);
-    mqttPublish("sunlightthreshold", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.insideLightsBrightness);
-    mqttPublish("insidelightsbrightness", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.outsideLightsBrightness);
-    mqttPublish("outsidelightsbrightness", tmpBuf);
+    sendParameterViaMQTT(IP);
+    sendParameterViaMQTT(MAC);
+    sendParameterViaMQTT(SPECIFICSETTINGSVER);
+    sendParameterViaMQTT(COMMONSETTINGSVER);
+    sendParameterViaMQTT(INSIDEBRIGHTNESS);
+    sendParameterViaMQTT(OUTSIDEBRIGHTNESS);
+    sendParameterViaMQTT(OUTSIDEONTIME);
+    sendParameterViaMQTT(SUNLIGHTTHRESHOLD);
   }
-  else if (strcmp(topic, "bikeshed/set/floodoffdelay") == 0)
-  {
-    Serial.print(F("MQTT: setfloodoffdelay = "));
-    Serial.print(p);
-    Serial.println(F("s"));
-    specificSettings.outsideLightAfterMotionTime = atol(p) * 1000;
-  }
-  else if (strcmp(topic, "bikeshed/set/sunlightthreshold") == 0)
-  {
-    int v = atoi(p);
-    if (v >= 0 && v <= 1023)
-    {
-      Serial.print(F("MQTT: sunlightthreshold = "));
-      Serial.println(p);
-      specificSettings.sunlightThreshold = v;
-    }
-    else
-    {
-      Serial.print(F("MQTT: error, sunlightthreshold = "));
-      Serial.println(p);
-    }
-  }
-  else if (strcmp(topic, "bikeshed/set/retain") == 0)
-  {
-    Serial.print(F("MQTT: Retaining settings in EEPROM"));
-    EEPROM.updateBlock(0, commonSettings);
-    EEPROM.updateBlock(512, specificSettings);
-  }
-  else if (strcmp(topic, "bikeshed/set/insidelightsbrightness") == 0)
+  else if (strcmp(topic, "bikeshed/insidelights/brightness/set") == 0)
   {
     int v = atoi(p);
     if (v >= 0 && v <= 255)
@@ -192,8 +173,9 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
       Serial.print(F("MQTT: error, insidelightsbrightness = "));
       Serial.println(p);
     }
+    sendParameterViaMQTT(INSIDEBRIGHTNESS);
   }
-  else if (strcmp(topic, "bikeshed/set/outsidelightsbrightness") == 0)
+  else if (strcmp(topic, "bikeshed/outsidelights/brightness/set") == 0)
   {
     int v = atoi(p);
     if (v >= 0 && v <= 255)
@@ -212,6 +194,37 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
       Serial.print(F("MQTT: error, outsidelightsbrightness = "));
       Serial.println(p);
     }
+    sendParameterViaMQTT(OUTSIDEBRIGHTNESS);
+  }
+  else if (strcmp(topic, "bikeshed/outsideLights/onTime/set") == 0)
+  {
+    Serial.print(F("MQTT: setfloodoffdelay = "));
+    Serial.print(p);
+    Serial.println(F("s"));
+    specificSettings.outsideLightAfterMotionTime = atol(p) * 1000;
+    sendParameterViaMQTT(OUTSIDEONTIME);
+  }
+  else if (strcmp(topic, "bikeshed/sunlightLevel/threshold/set") == 0)
+  {
+    int v = atoi(p);
+    if (v >= 0 && v <= 1023)
+    {
+      Serial.print(F("MQTT: sunlightthreshold = "));
+      Serial.println(p);
+      specificSettings.sunlightThreshold = v;
+    }
+    else
+    {
+      Serial.print(F("MQTT: error, sunlightthreshold = "));
+      Serial.println(p);
+    }
+    sendParameterViaMQTT(SUNLIGHTTHRESHOLD);
+  }
+  else if (strcmp(topic, "bikeshed/settings/retain/set") == 0)
+  {
+    Serial.print(F("MQTT: Retaining settings in EEPROM"));
+    EEPROM.updateBlock(0, commonSettings);
+    EEPROM.updateBlock(512, specificSettings);
   }
   else
   {
@@ -219,6 +232,51 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   }
 
   free(p);
+}
+
+void sendParameterViaMQTT(Parameter p)
+{
+  IPAddress ip;
+
+  switch (p)
+  {
+    case MAC:
+      snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+      mqttPublish("mac", tmpBuf);
+      break;
+    case IP:
+      ip = Ethernet.localIP();
+      snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+      mqttPublish("ip", tmpBuf);
+      break;
+    case SPECIFICSETTINGSVER:
+      snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.version);
+      mqttPublish("specificsettingsversion", tmpBuf);
+      break;
+    case COMMONSETTINGSVER:
+      snprintf(tmpBuf, sizeof(tmpBuf), "%d", commonSettings.version);
+      mqttPublish("commonsettingsversion", tmpBuf);
+      break;
+    case INSIDEBRIGHTNESS:
+      snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.insideLightsBrightness);
+      mqttPublish("insidelightsbrightness", tmpBuf);
+      break;
+    case OUTSIDEBRIGHTNESS:
+      snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.outsideLightsBrightness);
+      mqttPublish("outsidelightsbrightness", tmpBuf);
+      break;
+    case OUTSIDEONTIME:
+      snprintf(tmpBuf, sizeof(tmpBuf), "%lu", specificSettings.outsideLightAfterMotionTime / 1000);
+      mqttPublish("floodoffdelay", tmpBuf);
+      break;
+    case SUNLIGHTTHRESHOLD:
+      snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.sunlightThreshold);
+      mqttPublish("sunlightthreshold", tmpBuf);
+      break;
+    default:
+      Serial.println(F("MQTT: WTF?"));
+      break;
+  }
 }
 
 // Function that printf and related will use to print to the serial port
@@ -347,13 +405,13 @@ void loop()
     if (doorState == DOOROPEN)
     {
       Serial.println(F("Door open"));
-      mqttPublish("door", "open");
+      mqttPublish("door/open", "true");
       insideLights(ON);
     }
     else
     {
       Serial.println(F("Door closed"));
-      mqttPublish("door", "closed");
+      mqttPublish("door/open", "false");
       insideLights(OFF);
     }
   }
@@ -371,14 +429,14 @@ void loop()
     {
       Serial.println(F("Motion detected, sensor A"));
       recentActivity = true;
-      mqttPublish("motion", "detected-ch1");
+      mqttPublish("motion/motionA", "true");
       outsideLights(ON);
     }
     if (motionBState != previousMotionBState)
     {
       Serial.println(F("Motion detected, sensor B"));
       recentActivity = true;
-      mqttPublish("motion", "detected-ch2");
+      mqttPublish("motion/motionB", "true");
       outsideLights(ON);
     }
   }
@@ -392,18 +450,14 @@ void loop()
         recentActivity = false;
 
         Serial.println(F("Motion timer expired"));
-        mqttPublish("motiontimer", "expired");
+        mqttPublish("motion/motionA", "false");
+        mqttPublish("motion/motionB", "false");
         outsideLights(OFF);
       }
       else
       {
         if (motionTimer > timerPrevious + 1000)
         {
-          if (motionTimer / 1000 == 1)
-          {
-            mqttPublish("motion", "gone");
-          }
-
           Serial.print(motionTimer / 1000);
           Serial.print(" of ");
           Serial.println(specificSettings.outsideLightAfterMotionTime / 1000);
@@ -433,8 +487,7 @@ void insideLights(bool state)
   {
     testedState = ON;
   }
-  mqttPublish("insidelights", testedState == ON ? "on" : "off");
-  //digitalWrite(INSIDELIGHTSPIN, testedState);
+  mqttPublish("insideLights/on", testedState == ON ? "true" : "false");
   if (testedState)
   {
     analogWrite(INSIDELIGHTSPIN, specificSettings.insideLightsBrightness);
@@ -453,8 +506,7 @@ void outsideLights(bool state)
   {
     testedState = ON;
   }
-  mqttPublish("outsidelights", testedState == ON ? "on" : "off");
-  //digitalWrite(OUTSIDELIGHTSPIN, testedState);
+  mqttPublish("outsideLights/on", testedState == ON ? "true" : "false");
   if (testedState)
   {
     analogWrite(OUTSIDELIGHTSPIN, specificSettings.outsideLightsBrightness);
