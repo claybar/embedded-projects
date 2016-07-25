@@ -319,7 +319,7 @@ void setup()
   // enable the watchdog timer - 8s timeout
   Serial.print(F("WDT: "));
   Serial.print(WDTO_8S);
-  Serial.print(F(" s"));
+  Serial.println(F(" s"));
   wdt_enable(WDT);
   wdt_reset();
 
