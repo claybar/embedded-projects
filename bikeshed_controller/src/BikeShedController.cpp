@@ -128,8 +128,8 @@ void setup()
     Serial.println(F("EEP: Default specific settings"));
     specificSettings.outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
     specificSettings.sunlightThreshold = 511;  // Lights on if reading under this
-    specificSettings.insideLightsBrightness = 127;
-    specificSettings.outsideLightsBrightness = 127;
+    specificSettings.insideLightsBrightness = 50;
+    specificSettings.outsideLightsBrightness = 50;
   }
 
   Serial.print(F("DEV: Name: "));
@@ -237,7 +237,6 @@ void loop()
       if (motionTimer > specificSettings.outsideLightAfterMotionTime)
       {
         recentActivity = false;
-
         Serial.println(F("Motion timer expired"));
         mqttPublish("motion", "expired");
         outsideLights(OFF);
@@ -250,11 +249,9 @@ void loop()
           {
             mqttPublish("motion", "gone");
           }
-
           Serial.print(motionTimer / 1000);
           Serial.print(" of ");
           Serial.println(specificSettings.outsideLightAfterMotionTime / 1000);
-
           timerPrevious += 1000;
         }
       }
@@ -273,8 +270,9 @@ void loop()
 /*-------- MQTT setup ----------*/
 void mqttSetupSubscriptions()
 {
+  // These get bikeshed/ prepended inside subscribe
   mqttSubscribe("request");
-  mqttSubscribe("#/set");
+  mqttSubscribe("+/set");
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length)
@@ -328,7 +326,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
   }
   else if (strcmp(topicStrip, "retain/set") == 0)
   {
-    Serial.print(F("MQTT: Retaining settings in EEPROM"));
+    Serial.println(F("MQTT: Retaining settings in EEPROM"));
     EEPROM.updateBlock(0, commonSettings);
     EEPROM.updateBlock(512, specificSettings);
   }
@@ -357,7 +355,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
   else if (strcmp(topicStrip, "insidelightsbrightness/set") == 0)
   {
     int v = atoi(p);
-    if (v >= 0 && v <= 255)
+    if (v >= 0 && v <= 100)
     {
       Serial.print(F("MQTT: insidelightsbrightness = "));
       Serial.println(p);
@@ -365,19 +363,20 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
       // Apply to the light output immediately if the door is open
       if (doorState == DOOROPEN)
       {
-        analogWrite(INSIDELIGHTSPIN, v);
+        analogWrite(INSIDELIGHTSPIN, percent2Int(v));
       }
     }
     else
     {
       Serial.print(F("MQTT: error, insidelightsbrightness = "));
-      Serial.println(p);
+      Serial.print(p);
+      Serial.println(F(" (range 0-100)"));
     }
   }
   else if (strcmp(topicStrip, "outsidelightsbrightness/set") == 0)
   {
     int v = atoi(p);
-    if (v >= 0 && v <= 255)
+    if (v >= 0 && v <= 100)
     {
       Serial.print(F("MQTT: outsidelightsbrightness = "));
       Serial.println(p);
@@ -385,13 +384,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
       // Apply to the light output immediately if there is current activity
       if (recentActivity)
       {
-        analogWrite(OUTSIDELIGHTSPIN, v);
+        analogWrite(OUTSIDELIGHTSPIN, percent2Int(v));
       }
     }
     else
     {
       Serial.print(F("MQTT: error, outsidelightsbrightness = "));
-      Serial.println(p);
+      Serial.print(p);
+      Serial.println(F(" (range 0-100)"));
     }
   }
   else
@@ -404,7 +404,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
 
 /*-------- Hardware Abstraction ----------*/
 // Function that printf and related will use to print to the serial port
-int serial_putchar(char c, FILE* f) {
+int serial_putchar(char c, FILE* f)
+{
     if (c == '\n') serial_putchar('\r', f);
     return Serial.write(c) == 1? 0 : 1;
 }
@@ -419,10 +420,9 @@ void insideLights(bool state)
     testedState = ON;
   }
   mqttPublish("insidelights", testedState == ON ? "on" : "off");
-  //digitalWrite(INSIDELIGHTSPIN, testedState);
   if (testedState)
   {
-    analogWrite(INSIDELIGHTSPIN, specificSettings.insideLightsBrightness);
+    analogWrite(INSIDELIGHTSPIN, percent2Int(specificSettings.insideLightsBrightness));
   }
   else
   {
@@ -439,10 +439,9 @@ void outsideLights(bool state)
     testedState = ON;
   }
   mqttPublish("outsidelights", testedState == ON ? "on" : "off");
-  //digitalWrite(OUTSIDELIGHTSPIN, testedState);
   if (testedState)
   {
-    analogWrite(OUTSIDELIGHTSPIN, specificSettings.outsideLightsBrightness);
+    analogWrite(OUTSIDELIGHTSPIN, percent2Int(specificSettings.outsideLightsBrightness));
   }
   else
   {
@@ -585,7 +584,8 @@ void serialMQTTRelay()
 }
 
 // This gets set as the default handler, and gets called when no other command matches.
-void serialUnrecognized(const char *command) {
+void serialUnrecognized(const char *command)
+{
   Serial.println(F("SER: ??"));
 }
 
@@ -661,4 +661,9 @@ byte errorMonitorMQTT()
   }
 
   return errorCode;
+}
+
+int percent2Int(int p)
+{
+  return p * 2.55;
 }
