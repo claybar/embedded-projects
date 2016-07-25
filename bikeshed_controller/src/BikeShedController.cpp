@@ -362,7 +362,7 @@ void loop()
   }
 
   // While motion present or door is open, keep resetting the countdown timer.
-  // Fire messages only on positive edges
+  // Fire detected messages only on positive edges
   if (motionAState == HIGH || motionBState == HIGH || doorState == DOOROPEN)
   {
     // Reset timer and log presence of motion
@@ -489,7 +489,8 @@ boolean ethernetConnect()
 void mqttSetupSubscriptions()
 {
   mqttSubscribe("request");
-  mqttSubscribe("set/#");
+  mqttSubscribe("retain");
+  mqttSubscribe("#/set");
 }
 
 boolean mqttConnect()
