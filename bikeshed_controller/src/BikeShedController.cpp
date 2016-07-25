@@ -288,7 +288,7 @@ void setup()
     specificSettings.outsideLightsBrightness = 127;
   }
 
-  Serial.print(F("Device Name: "));
+  Serial.print(F("DEV: Name: "));
   Serial.println(commonSettings.deviceName);
 
   Serial.print(F("MAC: "));
