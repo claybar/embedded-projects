@@ -24,7 +24,7 @@ void serialUnrecognized(const char *command);
 boolean ethernetConnect();
 boolean mqttConnect();
 void mqttSetupSubscriptions();
-void mqtt_callback(char* topic, byte* payload, unsigned int length);
+void mqttCallback(char* topic, byte* payload, unsigned int length);
 void mqttSubscribe(const char* name);
 void mqttPublish(const char* name, const char* payload);
 void mqttPublishRaw(const char* name, const char* payload);
