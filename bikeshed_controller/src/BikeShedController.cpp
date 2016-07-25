@@ -158,7 +158,7 @@ void setup()
 
   Serial.println(F("ALM: Setup"));
   //Alarm.timerRepeat( 5 * 60, fiveMinsTimer);
-  Alarm.timerRepeat( 6, statusUpdateTimer);  // Status sent 10x per minute
+  Alarm.timerRepeat( 15, statusUpdateTimer);  // Status sent 4x per minute
 
   // enable the watchdog timer - 8s timeout
   Serial.print(F("WDT: "));
