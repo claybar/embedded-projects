@@ -157,7 +157,6 @@ void setup()
   serialCmd.setDefaultHandler(serialUnrecognized);
 
   Serial.println(F("ALM: Setup"));
-  //Alarm.timerRepeat( 5 * 60, fiveMinsTimer);
   Alarm.timerRepeat( 15, statusUpdateTimer);  // Status sent 4x per minute
 
   // enable the watchdog timer - 8s timeout
