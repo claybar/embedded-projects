@@ -34,6 +34,7 @@ Within states [Dusk, Night, Dawn] motion
 #include <Secrets.h>
 
 #include "BikeShedController.h"
+#include "Curve.h"
 
 // MQTT setup
 const int mqttWillQos = 0;
@@ -73,6 +74,7 @@ EthernetClient ethernet;
 PubSubClient mqtt(ethernet);
 SerialCommand serialCmd;
 elapsedMillis motionTimer;
+Curve ledCurve;
 
 void setup()
 {
@@ -111,7 +113,8 @@ void setup()
   {
     Serial.println(F("EEP: Default common settings"));
     strcpy(commonSettings.deviceName, "bikeshed");
-    strcpy(commonSettings.mqttTopicBase, "bikeshed");
+    strcpy(commonSettings.deviceFriendlyName, "Bikeshed Controller");
+    strcpy(commonSettings.mqttTopicBase, "devices/bikeshed");
     strcpy(commonSettings.mqttWillTopic, "clients/bikeshed");
     strcpy(commonSettings.mqttWillMessage, "unexpected exit");
   }
@@ -276,6 +279,8 @@ void mqttSetupSubscriptions()
 
 void mqttCallback(char* topic, byte* payload, unsigned int length)
 {
+  bool updateRetained = false;
+
   // Allocate the correct amount of memory for the payload copy
   char* p = (char*)malloc(length + 1);
 
@@ -302,32 +307,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
     {
       Serial.println(F("MQTT: status tx"));
     }
-
-    snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    mqttPublish("mac", tmpBuf);
-
-    IPAddress ip = Ethernet.localIP();
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-    mqttPublish("ip", tmpBuf);
-
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", commonSettings.version);
-    mqttPublish("commonsettingsversion", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.version);
-    mqttPublish("specificsettingsversion", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%lu", specificSettings.outsideLightAfterMotionTime / 1000);
-    mqttPublish("floodoffdelay", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.sunlightThreshold);
-    mqttPublish("sunlightthreshold", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.insideLightsBrightness);
-    mqttPublish("insidelightsbrightness", tmpBuf);
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.outsideLightsBrightness);
-    mqttPublish("outsidelightsbrightness", tmpBuf);
+    updateRetained = true;
   }
   else if (strcmp(topicStrip, "retain/set") == 0)
   {
     Serial.println(F("MQTT: Retaining settings in EEPROM"));
     EEPROM.updateBlock(0, commonSettings);
     EEPROM.updateBlock(512, specificSettings);
+    updateRetained = true;
   }
   else if (strcmp(topicStrip, "floodoffdelay/set") == 0)
   {
@@ -335,6 +322,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
     Serial.print(p);
     Serial.println(F("s"));
     specificSettings.outsideLightAfterMotionTime = atol(p) * 1000;
+    updateRetained = true;
   }
   else if (strcmp(topicStrip, "sunlightthreshold/set") == 0)
   {
@@ -350,6 +338,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
       Serial.print(F("MQTT: error, sunlightthreshold = "));
       Serial.println(p);
     }
+    updateRetained = true;
   }
   else if (strcmp(topicStrip, "insidelightsbrightness/set") == 0)
   {
@@ -362,7 +351,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
       // Apply to the light output immediately if the door is open
       if (doorState == DOOROPEN)
       {
-        analogWrite(INSIDELIGHTSPIN, percent2Int(v));
+        analogWrite(INSIDELIGHTSPIN, percent2LEDInt(v));
       }
     }
     else
@@ -371,6 +360,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
       Serial.print(p);
       Serial.println(F(" (range 0-100)"));
     }
+    updateRetained = true;
   }
   else if (strcmp(topicStrip, "outsidelightsbrightness/set") == 0)
   {
@@ -383,7 +373,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
       // Apply to the light output immediately if there is current activity
       if (recentActivity)
       {
-        analogWrite(OUTSIDELIGHTSPIN, percent2Int(v));
+        analogWrite(OUTSIDELIGHTSPIN, percent2LEDInt(v));
       }
     }
     else
@@ -392,6 +382,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
       Serial.print(p);
       Serial.println(F(" (range 0-100)"));
     }
+    updateRetained = true;
   }
   else
   {
@@ -399,6 +390,39 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
   }
 
   free(p);
+
+  if (updateRetained)
+  {
+    publishAllRetained();
+  }
+}
+
+void publishAllRetained()
+{
+  snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  mqttPublish("$mac", tmpBuf, true);
+
+  IPAddress ip = Ethernet.localIP();
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+  mqttPublish("$localip", tmpBuf, true);
+
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d", commonSettings.version);
+  mqttPublish("$commonsettingsversion", tmpBuf, true);
+
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.version);
+  mqttPublish("$specificsettingsversion", tmpBuf, true);
+
+  snprintf(tmpBuf, sizeof(tmpBuf), "%lu", specificSettings.outsideLightAfterMotionTime / 1000);
+  mqttPublish("$floodoffdelay", tmpBuf, true);
+
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.sunlightThreshold);
+  mqttPublish("$sunlightthreshold", tmpBuf, true);
+
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.insideLightsBrightness);
+  mqttPublish("$insidelightsbrightness", tmpBuf, true);
+
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.outsideLightsBrightness);
+  mqttPublish("$outsidelightsbrightness", tmpBuf, true);
 }
 
 /*-------- Hardware Abstraction ----------*/
@@ -421,7 +445,7 @@ void insideLights(bool state)
   mqttPublish("insidelights", testedState == ON ? "on" : "off");
   if (testedState)
   {
-    analogWrite(INSIDELIGHTSPIN, percent2Int(specificSettings.insideLightsBrightness));
+    analogWrite(INSIDELIGHTSPIN, percent2LEDInt(specificSettings.insideLightsBrightness));
   }
   else
   {
@@ -440,7 +464,7 @@ void outsideLights(bool state)
   mqttPublish("outsidelights", testedState == ON ? "on" : "off");
   if (testedState)
   {
-    analogWrite(OUTSIDELIGHTSPIN, percent2Int(specificSettings.outsideLightsBrightness));
+    analogWrite(OUTSIDELIGHTSPIN, percent2LEDInt(specificSettings.outsideLightsBrightness));
   }
   else
   {
@@ -496,10 +520,12 @@ void mqttSubscribe(const char* name)
   mqtt.subscribe(topic);
 }
 
+// Prepends the MQTT topic: mqttTopicBase/
 void mqttPublish(const char* name, const char* payload)
 {
   mqttPublish(name, payload, false);
 }
+
 // Prepends the MQTT topic: mqttTopicBase/
 void mqttPublish(const char* name, const char* payload, bool retained)
 {
@@ -681,7 +707,8 @@ byte errorMonitorMQTT()
   return errorCode;
 }
 
-int percent2Int(int p)
+// NO ERROR CHECKING - MUST BE 0-100
+int percent2LEDInt(int p)
 {
-  return p * 2.55;
+  return ledCurve.exponential(p);
 }

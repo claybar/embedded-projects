@@ -53,5 +53,6 @@ void mqttSubscribe(const char* name);
 void mqttPublish(const char* name, const char* payload);
 void mqttPublish(const char* name, const char* payload, bool retained);
 void mqttPublishRaw(const char* name, const char* payload, bool retained);
+void publishAllRetained();
 
-int percent2Int(int p);
+int percent2LEDInt(int p);
