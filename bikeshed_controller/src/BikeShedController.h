@@ -27,4 +27,4 @@ void mqttSetupSubscriptions();
 void mqtt_callback(char* topic, byte* payload, unsigned int length);
 void mqttSubscribe(const char* name);
 void mqttPublish(const char* name, const char* payload);
-void mqttPublishRelay(const char* name, const char* payload);
+void mqttPublishRaw(const char* name, const char* payload);

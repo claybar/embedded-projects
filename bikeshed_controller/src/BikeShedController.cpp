@@ -529,10 +529,11 @@ void mqttPublish(const char* name, const char* payload)
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/%s", commonSettings.mqttTopicBase, name);
 
-  mqttPublishRelay(topic, payload);
+  mqttPublishRaw(topic, payload);
 }
 
-void mqttPublishRelay(const char* name, const char* payload)
+// Lower-level publisher; just sends it on out
+void mqttPublishRaw(const char* name, const char* payload)
 {
   Serial.print(F("MQTT: "));
   Serial.print(name);
@@ -574,33 +575,38 @@ void serialMQTTRelay()
   char *topic;
   char *payload;
 
-  Serial.println(F("SER: rx"));
+  Serial.print(F("SER: rx: "));
   topic = serialCmd.next();
-  Serial.print(F("  Topic: "));
   if (topic != NULL)
   {
-    Serial.println(topic);
+    Serial.print(topic);
   }
   else
   {
-    Serial.println(F("  None"));
+    Serial.print(F("<NoTopic>"));
   }
 
+  Serial.print(F(" -> "));
+
   payload = serialCmd.next();
-  Serial.print(F("  Payload: "));
   if (payload != NULL)
   {
     Serial.println(payload);
   }
   else
   {
-    Serial.println(F("  None"));
+    Serial.println(F("<NoPayload>"));
   }
 
+  // Only publish messages with a topic and payload
   if (topic != NULL && payload != NULL)
   {
-    // Send a MQTT message
-    mqttPublishRelay(topic, payload);
+    mqttPublishRaw(topic, payload);
+    Serial.println(F("  Relay message sent"));
+  }
+  else
+  {
+    Serial.println(F("  Relay message NOT sent"));    
   }
 }
 
