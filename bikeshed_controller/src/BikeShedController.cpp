@@ -127,9 +127,9 @@ void setup()
   {
     Serial.println(F("EEP: Default specific settings"));
     specificSettings.outsideLightAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
-    specificSettings.sunlightThreshold = 511;  // Lights on if reading under this
-    specificSettings.insideLightsBrightness = 50;
-    specificSettings.outsideLightsBrightness = 50;
+    specificSettings.sunlightThreshold = 511;  // 0-1023 Lights on if reading under this
+    specificSettings.insideLightsBrightness = 50;  // Percent
+    specificSettings.outsideLightsBrightness = 50;  // Percent
   }
 
   Serial.print(F("DEV: Name: "));
