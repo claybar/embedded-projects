@@ -51,6 +51,7 @@ void mqttSetupSubscriptions();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void mqttSubscribe(const char* name);
 void mqttPublish(const char* name, const char* payload);
-void mqttPublishRaw(const char* name, const char* payload);
+void mqttPublish(const char* name, const char* payload, bool retained);
+void mqttPublishRaw(const char* name, const char* payload, bool retained);
 
 int percent2Int(int p);

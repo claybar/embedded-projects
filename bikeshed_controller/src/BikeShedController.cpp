@@ -496,24 +496,33 @@ void mqttSubscribe(const char* name)
   mqtt.subscribe(topic);
 }
 
-// Prepends the MQTT topic: mqttTopicBase/
 void mqttPublish(const char* name, const char* payload)
+{
+  mqttPublish(name, payload, false);
+}
+// Prepends the MQTT topic: mqttTopicBase/
+void mqttPublish(const char* name, const char* payload, bool retained)
 {
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/%s", commonSettings.mqttTopicBase, name);
-  mqttPublishRaw(topic, payload);
+  mqttPublishRaw(topic, payload, retained);
 }
 
 // Lower-level publisher; just sends it on out
-void mqttPublishRaw(const char* name, const char* payload)
+void mqttPublishRaw(const char* name, const char* payload, bool retained)
 {
   Serial.print(F("MQTT: "));
   Serial.print(name);
   Serial.print(F(" "));
-  Serial.println(payload);
+  Serial.print(payload);
+  if (retained)
+  {
+    Serial.print(F(" (retained)"));
+  }
+  Serial.println("");
 
   // publish to the MQTT broker
-  boolean success = mqtt.publish(name, payload);
+  boolean success = mqtt.publish(name, payload, retained);
   if(!success)
   {
     Serial.print(F("MQTT: pub failed, state: "));
@@ -546,6 +555,8 @@ void serialMQTTRelay()
   //int aNumber;
   char *topic;
   char *payload;
+  char *retainedStr;
+  bool retained;
 
   Serial.print(F("SER: rx: "));
   topic = serialCmd.next();
@@ -563,17 +574,25 @@ void serialMQTTRelay()
   payload = serialCmd.next();
   if (payload != NULL)
   {
-    Serial.println(payload);
+    Serial.print(payload);
   }
   else
   {
     Serial.println(F("<NoPayload>"));
   }
 
+  retainedStr = serialCmd.next();
+  retained = false;
+  if (strcmp(retainedStr , "retain") == 0)
+  {
+    Serial.print(F(" (retained)"));
+    retained = true;
+  }
+
   // Only publish messages with a topic and payload
   if (topic != NULL && payload != NULL)
   {
-    mqttPublishRaw(topic, payload);
+    mqttPublishRaw(topic, payload, retained);
     Serial.println(F("  Relay message sent"));
   }
   else
