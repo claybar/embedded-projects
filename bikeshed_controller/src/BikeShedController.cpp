@@ -300,7 +300,6 @@ void loop()
 void mqttSetupSubscriptions()
 {
   mqttSubscribe("request");
-  mqttSubscribe("retain");
   mqttSubscribe("#/set");
 }
 
@@ -353,7 +352,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
     snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.outsideLightsBrightness);
     mqttPublish("outsidelightsbrightness", tmpBuf);
   }
-  else if (strcmp(topicStrip, "retain") == 0)
+  else if (strcmp(topicStrip, "retain/set") == 0)
   {
     Serial.print(F("MQTT: Retaining settings in EEPROM"));
     EEPROM.updateBlock(0, commonSettings);
