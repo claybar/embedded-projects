@@ -592,7 +592,7 @@ void serialUnrecognized(const char *command)
 /*-------- Timers ----------*/
 void statusUpdateTimer()
 {
-  Serial.println(F("TICK"));
+  Serial.println(F("."));
 
   // Measure and store light level
   sunlightLevel = analogRead(LIGHTSENSORPIN);
