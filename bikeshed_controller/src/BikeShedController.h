@@ -1,10 +1,34 @@
 #include <Arduino.h>
 
+// Hardware setup
+#define ACTIVITYLEDPIN 13
+#define INSIDELIGHTSPIN 6
+#define OUTSIDELIGHTSPIN 9
+#define MOTIONSENSORAPIN 8
+#define MOTIONSENSORBPIN 3
+#define DOORSENSORPIN 7
+
+// Analog pins
+#define VOLTAGE5PIN 2
+#define VOLTAGE9PIN 1
+#define VOLTAGE12PIN 0
+#define VOLTAGE24PIN 3
+#define LIGHTSENSORPIN 7
+
+#define MAC_I2C_ADDR 0x50
+#define MAC_REG_BASE 0xFA
+
+// Logic of motion and door sensors
+#define MOTION LOW
+#define DOOROPEN HIGH
+#define ON true
+#define OFF false
+
 // Error detection
-#define WDT                     WDTO_8S
-#define ERROR_NONE              0x00
-#define ERROR_MQTT_DISCONNECTED 0x01
-#define ERROR_MQTT_TXFAIL       0x02
+#define WDT                    WDTO_8S
+#define MQTTERROR_NONE         0x00
+#define MQTTERROR_DISCONNECTED 0x01
+#define MQTTERROR_TXFAIL       0x02
 byte errorMonitorMQTT();
 
 // Hardware interaction
