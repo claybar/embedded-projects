@@ -395,7 +395,7 @@ void loop()
         recentActivity = false;
 
         Serial.println(F("Motion timer expired"));
-        mqttPublish("motiontimer", "expired");
+        mqttPublish("motion", "expired");
         outsideLights(OFF);
       }
       else
