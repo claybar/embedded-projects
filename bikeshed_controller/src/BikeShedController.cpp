@@ -662,9 +662,12 @@ void statusUpdateTimer()
   int rail12VmV = analogRead(VOLTAGE12PIN) * 2 * 8;
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail12VmV / 1000, rail12VmV % 1000);
   mqttPublish("12V", tmpBuf);
+
+  /* 24V monitoring removed for now, hw not installed
   int rail24VmV = analogRead(VOLTAGE24PIN) * 2 * 16;
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail24VmV / 1000, rail24VmV % 1000);
   mqttPublish("24V", tmpBuf);
+  */
 
   // Test if something is wrong with ethernet & MQTT
   if (!ethernet.connected())
