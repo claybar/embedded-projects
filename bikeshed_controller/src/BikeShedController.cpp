@@ -640,6 +640,10 @@ void statusUpdateTimer()
 {
   Serial.println(F("."));
 
+  // Uptime - wraps after 50 days or so
+  snprintf(tmpBuf, sizeof(tmpBuf), "%lu", millis() / 1000);
+  mqttPublish("$uptime", tmpBuf, true);
+
   // Measure and store light level
   sunlightLevel = analogRead(LIGHTSENSORPIN);
   snprintf(tmpBuf, sizeof(tmpBuf), "%d", sunlightLevel);
