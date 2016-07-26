@@ -616,6 +616,7 @@ void serialMQTTRelay()
     Serial.print(F(" (retained)"));
     retained = true;
   }
+  Serial.println("");
 
   // Only publish messages with a topic and payload
   if (topic != NULL && payload != NULL)
