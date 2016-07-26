@@ -105,24 +105,23 @@ void setup()
   uint8_t settingsVer = EEPROM.readByte(0);
   Serial.print(F("EEP: Read common settings ver: "));
   Serial.println(settingsVer);
-  if (settingsVer == 0)
+  if (settingsVer == commonSettings.version)
   {
     EEPROM.readBlock(0, commonSettings);
   }
   else
   {
     Serial.println(F("EEP: Default common settings"));
-    strcpy(commonSettings.deviceName, "bikeshed");
-    strcpy(commonSettings.deviceFriendlyName, "Bikeshed Controller");
-    strcpy(commonSettings.mqttTopicBase, "devices/bikeshed");
-    strcpy(commonSettings.mqttWillTopic, "clients/bikeshed");
-    strcpy(commonSettings.mqttWillMessage, "unexpected exit");
+    strcpy(commonSettings.deviceName, "bikeshed"); //12
+    strcpy(commonSettings.mqttTopicBase, "bikeshed"); //20
+    strcpy(commonSettings.mqttWillTopic, "clients/bikeshed"); //20
+    strcpy(commonSettings.mqttWillMessage, "unexpected exit"); //16
   }
 
   settingsVer = EEPROM.readByte(512);
   Serial.print(F("EEP: Read specific settings ver: "));
   Serial.println(settingsVer);
-  if (settingsVer == 0)
+  if (settingsVer == specificSettings.version)
   {
     EEPROM.readBlock(512, specificSettings);
   }
@@ -160,7 +159,7 @@ void setup()
   serialCmd.setDefaultHandler(serialUnrecognized);
 
   Serial.println(F("ALM: Setup"));
-  Alarm.timerRepeat( 15, statusUpdateTimer);  // Status sent 4x per minute
+  Alarm.timerRepeat(15, statusUpdateTimer);  // Status sent 4x per minute
 
   // enable the watchdog timer - 8s timeout
   Serial.print(F("WDT: "));
@@ -173,6 +172,9 @@ void setup()
   recentActivity = false;
   motionTimer = 0;
   timerPrevious = 0;
+
+  // Fire the set of retained messages
+  publishAllRetained();
 }
 
 void loop()
