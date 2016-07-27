@@ -55,4 +55,5 @@ void mqttPublish(const char* name, const char* payload, bool retained);
 void mqttPublishRaw(const char* name, const char* payload, bool retained);
 void publishAllRetained();
 
+int analogReadAverage(uint8_t pin);
 int percent2LEDInt(int p);

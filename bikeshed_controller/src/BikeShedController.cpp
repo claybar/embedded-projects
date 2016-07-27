@@ -653,14 +653,16 @@ void statusUpdateTimer()
   // Report voltages
   // Voltage reference connected to external 2.048V reference
   // Each rail via a divider of 1:4, 1:8, or 1:16
-  int rail5VmV = analogRead(VOLTAGE5PIN) * 2 * 4;
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail5VmV / 1000, rail5VmV % 1000);
+  int rail5VmV = analogReadAverage(VOLTAGE5PIN) * 2 * 4;
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%03d", rail5VmV / 1000, rail5VmV % 1000);
   mqttPublish("5V", tmpBuf);
-  int rail9VmV = analogRead(VOLTAGE9PIN) * 2 * 8;
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail9VmV / 1000, rail9VmV % 1000);
+
+  int rail9VmV = analogReadAverage(VOLTAGE9PIN) * 2 * 8;
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%03d", rail9VmV / 1000, rail9VmV % 1000);
   mqttPublish("9V", tmpBuf);
-  int rail12VmV = analogRead(VOLTAGE12PIN) * 2 * 8;
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail12VmV / 1000, rail12VmV % 1000);
+
+  int rail12VmV = analogReadAverage(VOLTAGE12PIN) * 2 * 8;
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d.%03d", rail12VmV / 1000, rail12VmV % 1000);
   mqttPublish("12V", tmpBuf);
 
   /* 24V monitoring removed for now, hw not installed
@@ -683,6 +685,19 @@ void statusUpdateTimer()
     mqttConnect();
     mqttSetupSubscriptions();
   }
+}
+
+int analogReadAverage(uint8_t pin)
+{
+  // Discard first reading
+  analogRead(pin);
+  int accum = 0;
+  for (int i = 0; i < 8; i++)
+  {
+    accum += analogRead(pin);
+  }
+
+  return accum / 8;
 }
 
 byte errorMonitorMQTT()
