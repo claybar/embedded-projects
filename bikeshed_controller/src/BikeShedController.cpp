@@ -105,24 +105,23 @@ void setup()
   uint8_t settingsVer = EEPROM.readByte(0);
   Serial.print(F("EEP: Read common settings ver: "));
   Serial.println(settingsVer);
-  if (settingsVer == 0)
+  if (settingsVer == commonSettings.version)
   {
     EEPROM.readBlock(0, commonSettings);
   }
   else
   {
     Serial.println(F("EEP: Default common settings"));
-    strcpy(commonSettings.deviceName, "bikeshed");
-    strcpy(commonSettings.deviceFriendlyName, "Bikeshed Controller");
-    strcpy(commonSettings.mqttTopicBase, "devices/bikeshed");
-    strcpy(commonSettings.mqttWillTopic, "clients/bikeshed");
-    strcpy(commonSettings.mqttWillMessage, "unexpected exit");
+    strcpy(commonSettings.deviceName, "bikeshed"); //12
+    strcpy(commonSettings.mqttTopicBase, "bikeshed"); //20
+    strcpy(commonSettings.mqttWillTopic, "clients/bikeshed"); //20
+    strcpy(commonSettings.mqttWillMessage, "unexpected exit"); //16
   }
 
   settingsVer = EEPROM.readByte(512);
   Serial.print(F("EEP: Read specific settings ver: "));
   Serial.println(settingsVer);
-  if (settingsVer == 0)
+  if (settingsVer == specificSettings.version)
   {
     EEPROM.readBlock(512, specificSettings);
   }
@@ -160,7 +159,7 @@ void setup()
   serialCmd.setDefaultHandler(serialUnrecognized);
 
   Serial.println(F("ALM: Setup"));
-  Alarm.timerRepeat( 15, statusUpdateTimer);  // Status sent 4x per minute
+  Alarm.timerRepeat(15, statusUpdateTimer);  // Status sent 4x per minute
 
   // enable the watchdog timer - 8s timeout
   Serial.print(F("WDT: "));
@@ -173,6 +172,9 @@ void setup()
   recentActivity = false;
   motionTimer = 0;
   timerPrevious = 0;
+
+  // Fire the set of retained messages
+  publishAllRetained();
 }
 
 void loop()
@@ -614,6 +616,7 @@ void serialMQTTRelay()
     Serial.print(F(" (retained)"));
     retained = true;
   }
+  Serial.println("");
 
   // Only publish messages with a topic and payload
   if (topic != NULL && payload != NULL)
@@ -638,6 +641,10 @@ void statusUpdateTimer()
 {
   Serial.println(F("."));
 
+  // Uptime - wraps after 50 days or so
+  snprintf(tmpBuf, sizeof(tmpBuf), "%lu", millis() / 1000);
+  mqttPublish("$uptime", tmpBuf, true);
+
   // Measure and store light level
   sunlightLevel = analogRead(LIGHTSENSORPIN);
   snprintf(tmpBuf, sizeof(tmpBuf), "%d", sunlightLevel);
@@ -655,9 +662,12 @@ void statusUpdateTimer()
   int rail12VmV = analogRead(VOLTAGE12PIN) * 2 * 8;
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail12VmV / 1000, rail12VmV % 1000);
   mqttPublish("12V", tmpBuf);
+
+  /* 24V monitoring removed for now, hw not installed
   int rail24VmV = analogRead(VOLTAGE24PIN) * 2 * 16;
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d", rail24VmV / 1000, rail24VmV % 1000);
   mqttPublish("24V", tmpBuf);
+  */
 
   // Test if something is wrong with ethernet & MQTT
   if (!ethernet.connected())

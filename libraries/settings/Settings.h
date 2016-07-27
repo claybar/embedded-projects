@@ -4,8 +4,8 @@ struct commonSettings0_t
 {
   const uint8_t version = 0;
   char deviceName[12];  // Also used as mqttClientID
-  char mqttTopicBase[12];
-  char mqttWillTopic[16];
+  char mqttTopicBase[20];
+  char mqttWillTopic[20];
   char mqttWillMessage[16];
 };
 
