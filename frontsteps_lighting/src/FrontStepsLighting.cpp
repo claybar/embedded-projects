@@ -18,6 +18,7 @@ Dawn -> Daytime
 Within states [Dusk, Night, Dawn] motion
 */
 
+#include <Arduino.h>
 #include <avr/wdt.h>
 #include <EtherTen.h>
 #include <SPI.h>
@@ -33,6 +34,7 @@ Within states [Dusk, Night, Dawn] motion
 #include <Secrets.h>
 
 #include "FrontStepsLighting.h"
+#include "Curve.h"
 
 // Hardware setup
 #define LIGHTINGPIN 9
@@ -57,7 +59,7 @@ commonSettings0_t commonSettings;
 frontstepsControllerSettings0_t specificSettings;
 
 // Used for short-term string building
-char tmpBuf[33];
+char tmpBuf[48];
 // Used to redirect stdout to the serial port
 FILE serial_stdout;
 
@@ -65,34 +67,25 @@ FILE serial_stdout;
 byte mac[] = { 0, 0, 0, 0, 0, 0 };
 IPAddress mqttIP(MQTT_SERVER_IP);
 
-// Defaults, some can be set later via MQTT
-/*
-int lightingLevelOff = 0; // percentage
-int lightingLevelAmbient = 10; // percentage
-int lightingLevelBright = 50;  // percentage
-int lightingChangeTime = 5000;  // milliseconds
-unsigned long lightingAfterMotionTime = 300000; // 5 * 60 * 1000;  // milliseconds
-*/
-
 int motionAState = 0;
 int motionBState = 0;
 int previousMotionAState = 0;
 int previousMotionBState = 0;
+bool recentActivity = false;    // Used to track how long since motion has been detected
+partsOfDay_t portionOfDay = daytime;    // Used to track how long since motion has been detected
+unsigned long timerPrevious;
 
 // Counters for tracking failed transmissions.  Used to reset processor after repeated failures.
 int txFailCount;
 int txFailCountTotal;
 
 // Used to track how long since motion has been detected
-bool recentMotion;
 elapsedMillis motionTimer;
 
 // Hardware and protocol handlers
-LEDFader lightingLed = LEDFader(LIGHTINGPIN);
-
 EthernetClient ethernet;
-
 PubSubClient mqtt(ethernet);
+Curve ledCurve;
 
 void mqtt_callback(char* topic, byte* payload, unsigned int length)
 {
@@ -156,9 +149,6 @@ void setup()
   // ensure the watchdog is disabled for now
   wdt_disable();
 
-  // More linear illumination for human eyes
-  lightingLed.set_curve(&Curve::exponential);
-
   Serial.begin(115200);
   // Redirect stdout to the serial port helper
   fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
@@ -195,11 +185,11 @@ void setup()
   else
   {
     Serial.println(F("EEP: Default specific settings"));
-    specificSettings.lightingAfterMotionTime = 300000; // 5 * 60 * 1000;  // milliseconds
+    specificSettings.lightingAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
     specificSettings.lightingLevelOff = 0;
-    specificSettings.lightingLevelAmbient = 10;
-    specificSettings.lightingLevelBright = 50;
-    specificSettings.lightingChangeTime = 5000;  // milliseconds
+    specificSettings.lightingLevelAmbient = 20;
+    specificSettings.lightingLevelBright = 80;
+    //specificSettings.lightingChangeTime = 500;  // milliseconds
   }
 
   Serial.print(F("Device Name: "));
@@ -229,77 +219,164 @@ void setup()
   }
   mqttSubscribe("request");
 
-  recentMotion = false;
+  // enable the watchdog timer - 8s timeout
+  Serial.print(F("WDT: "));
+  Serial.print(WDTO_8S);
+  Serial.println(F(" s"));
+  wdt_enable(WDT);
+  wdt_reset();
+
+  // State initialisation
+  recentActivity = false;
+  portionOfDay = night;
   motionTimer = 0;
+
+  updateLights();
 }
 
 void loop()
 {
+  wdt_reset();
+
   motionAState = digitalRead(MOTIONSENSORAPIN);
   motionBState = digitalRead(MOTIONSENSORBPIN);
+  if (MOTION_SENSOR == LOW)
+  {
+    motionAState = !motionAState;
+    motionBState = !motionBState;
+  }
 
-  // While motion is present, keep reseting the countdown timer.
-  // Fire messages only on positive edges
+  // While motion present, keep resetting the countdown timer.
+  // Fire detected messages only on positive edges
   if (motionAState == HIGH || motionBState == HIGH)
   {
     // Reset timer and log presence of motion
     motionTimer = 0;
-    recentMotion = true;
+    timerPrevious = 0;
 
     // Fire messages on positive edges
     if (motionAState != previousMotionAState)
     {
       Serial.println(F("Motion detected, sensor A"));
+      recentActivity = true;
       mqttPublish("motion", "detected-ch1");
+      updateLights();
     }
     if (motionBState != previousMotionBState)
     {
       Serial.println(F("Motion detected, sensor B"));
+      recentActivity = true;
       mqttPublish("motion", "detected-ch2");
+      updateLights();
     }
   }
-  else  // Sensors low
+  else  // Sensors all inactive, start the countdown
   {
-    // Test if there has been recent motion and the it has been gone for a while
-    if (recentMotion && (motionTimer > specificSettings.lightingAfterMotionTime))
+    // Test if there has been recent motion and it has been gone for a while
+    if (recentActivity)
     {
-      recentMotion = false;
-
-      Serial.println(F("Motion timer expired"));
-      mqttPublish("motion", "gone");
+      if (motionTimer > specificSettings.lightingAfterMotionTime)
+      {
+        recentActivity = false;
+        Serial.println(F("Motion timer expired"));
+        mqttPublish("motion", "expired");
+        updateLights();
+      }
+      else
+      {
+        if (motionTimer > timerPrevious + 1000)
+        {
+          if (motionTimer / 1000 == 1)
+          {
+            mqttPublish("motion", "gone");
+          }
+          Serial.print(motionTimer / 1000);
+          Serial.print(" of ");
+          Serial.println(specificSettings.lightingAfterMotionTime / 1000);
+          timerPrevious += 1000;
+        }
+      }
     }
   }
   previousMotionAState = motionAState;
   previousMotionBState = motionBState;
 
-  // Add in time-of-day to this logic
-  if (recentMotion)
-  {
-    lightingBright();
-  }
-  else
-  {
-    lightingOff();
-  }
-
   // Give all the worker tasks a bit of time
-  lightingLed.update();
+  Ethernet.maintain();
   mqtt.loop();
 }
 
-void lightingOff()
+void updateLights()
 {
-  lightingLed.fade(specificSettings.lightingLevelOff, specificSettings.lightingChangeTime);
-}
+  /*
+  There are many combinations of portion-of-day and motion to consider here:
+  | portion-of-day   | motion    | lights  |
+  +------------------+-----------+---------+
+  | daytime          | dont care | off     |
+  | evening, morning | no        | ambient |
+  | evening, morning | yes       | bright  |
+  | night            | no        | off     |
+  | night            | yes       | bright  |
+  */
 
-void lightingAmbient()
-{
-  lightingLed.fade(specificSettings.lightingLevelAmbient, specificSettings.lightingChangeTime);
-}
+  lightsLevel_t lights = off;
+  Serial.print(F("Portion of day: "));
+  if (portionOfDay == daytime)
+    Serial.println(F("DAYTIME"));
+  if (portionOfDay == evening)
+    Serial.println(F("EVENING"));
+  if (portionOfDay == night)
+    Serial.println(F("NIGHT"));
+  if (portionOfDay == morning)
+    Serial.println(F("MORNING"));
+  Serial.print(F("Motion: "));
+  Serial.println(recentActivity ? "YES" : "NO");
 
-void lightingBright()
-{
-  lightingLed.fade(specificSettings.lightingLevelBright, specificSettings.lightingChangeTime);
+  if (portionOfDay == daytime)
+  {
+    lights = off;
+  }
+  else if (portionOfDay == evening || portionOfDay == morning)
+  {
+    if (recentActivity == MOTION_NO)
+    {
+      lights = ambient;
+    }
+    else
+    {
+      lights = bright;
+    }
+  }
+  else if (portionOfDay == night)
+  {
+    if (recentActivity == MOTION_NO)
+    {
+      lights = off;
+    }
+    else
+    {
+      lights = bright;
+    }
+  }
+
+  if (lights == bright)
+  {
+    Serial.println(F("Lights bright"));
+    analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelBright));
+    mqttPublish("lights", "bright");
+  }
+  else if (lights == ambient)
+  {
+    Serial.println(F("Lights ambient"));
+    analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelAmbient));
+    mqttPublish("lights", "ambient");
+  }
+  else // lights == off
+  {
+    Serial.println(F("Lights off"));
+    analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelOff));
+    mqttPublish("lights", "off");
+  }
 }
 
 boolean mqttConnect()
@@ -368,4 +445,10 @@ byte readI2CRegister(byte i2c_address, byte reg)
   while(!Wire.available()) { }
   v = Wire.read();
   return v;
+}
+
+// NO ERROR CHECKING - MUST BE 0-100
+int percent2LEDInt(int p)
+{
+  return ledCurve.exponential(p);
 }
