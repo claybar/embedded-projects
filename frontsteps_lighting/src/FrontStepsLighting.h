@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Timezone.h>
 
 // Logic of motion sensors
 #define MOTION_SENSOR HIGH
@@ -23,9 +24,15 @@ enum lightsLevel_t {
   bright
 };
 
+TimeChangeRule nzdt = NZDT_RULE;
+TimeChangeRule nzst = NZST_RULE;
+
 int serial_putchar(char c, FILE* f);
 byte readI2CRegister(byte i2c_address, byte reg);
 int percent2LEDInt(int p);
+
+time_t getUtcFromNtp();
+void sendNTPpacket(IPAddress &address);
 
 void updateLights();
 
