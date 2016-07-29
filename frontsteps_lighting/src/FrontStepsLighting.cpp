@@ -26,6 +26,8 @@ Within states [Dusk, Night, Dawn] motion
 #include <Ethernet.h>
 #include <PubSubClient.h>
 //#include <LEDFader.h>
+#include <TimeLib.h>
+#include <TimeAlarms.h>
 #include <Curve.h>
 #include <elapsedMillis.h>
 #include <EEPROMex.h>
@@ -262,6 +264,9 @@ void setup()
     delay(5000);
   }
   mqttSubscribe("request");
+
+  Serial.println(F("ALM: Setup"));
+  Alarm.timerRepeat(60, timeOfDayAlarm);  // Status sent 4x per minute
 
   // enable the watchdog timer - 8s timeout
   Serial.print(F("WDT: "));
@@ -543,4 +548,48 @@ void sendNTPpacket(IPAddress &address)
   udp.beginPacket(address, 123); //NTP requests are to port 123
   udp.write(tmpBuf, NTP_PACKET_SIZE);
   udp.endPacket();
+}
+
+void timeOfDayAlarm()
+{
+  // Determine the time of day
+  time_t local = nzTZ.toLocal(now());
+
+  // Fake sunrise/sunset for now
+  int sunrise = 8 * 60;
+  int sunset = 20 * 60;
+  // minutes
+  int morningBeforeSunrise = 1;
+  int morningAfterSunrise = 2;
+  int eveningBeforeSunset = 4;
+  int eveningAfterSunset = 3;
+
+  // Test against rules to determine portion of day
+  int minAfterMidnight = hour(local) * 60 + minute(local);
+
+  // Morning
+  if (minAfterMidnight > (sunrise - morningBeforeSunrise) &&
+      minAfterMidnight < (sunrise + morningAfterSunrise))
+  {
+    portionOfDay = morning;
+  }
+  // Day
+  else if (minAfterMidnight > (sunrise + morningBeforeSunrise) &&
+      minAfterMidnight < (sunset - eveningBeforeSunset))
+  {
+    portionOfDay = daytime;
+  }
+  // Evening
+  else if (minAfterMidnight > (sunset - eveningBeforeSunset) &&
+      minAfterMidnight < (sunset + eveningAfterSunset))
+  {
+    portionOfDay = evening;
+  }
+  // Night
+  else
+  // (minAfterMidnight < (sunrise - morningBeforeSunrise) ||
+  //    minAfterMidnight > (sunset + eveningAfterSunset))
+  {
+    portionOfDay = night;
+  }
 }

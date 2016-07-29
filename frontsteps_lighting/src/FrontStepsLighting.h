@@ -34,6 +34,7 @@ int percent2LEDInt(int p);
 time_t getUtcFromNtp();
 void sendNTPpacket(IPAddress &address);
 
+void timeOfDayAlarm();
 void updateLights();
 
 boolean mqttConnect();
