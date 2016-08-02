@@ -32,6 +32,7 @@ Within states [Dusk, Night, Dawn] motion
 #include <elapsedMillis.h>
 #include <EEPROMex.h>
 #include <Timezone.h>
+#include <Sunrise.h>
 
 #include <Settings.h>
 #include <Secrets.h>
@@ -86,6 +87,7 @@ int txFailCountTotal;
 elapsedMillis motionTimer;
 
 Timezone nzTZ(nzdt, nzst);
+Sunrise sunrise(-43.531637, 172.636645, 12);
 
 // Hardware and protocol handlers
 EthernetClient ethernet;
@@ -223,13 +225,14 @@ void setup()
   Serial.println(F("NTP: time callback"));
   udp.begin(8888);  // Local port to listen for UDP packets
   setSyncProvider(getUtcFromNtp);
+  delay(5000);
   time_t utc = now();
   Serial.print(F("  utc: "));
   Serial.print(hour(utc));
   Serial.print(F(":"));
   Serial.print(minute(utc));
   Serial.print(F(":"));
-  Serial.println(second(utc));
+  Serial.print(second(utc));
   Serial.print(F(" "));
   Serial.print(dayShortStr(weekday(utc)));
   Serial.print(F(" "));
@@ -237,8 +240,9 @@ void setup()
   Serial.print(F(" "));
   Serial.print(monthShortStr(month(utc)));
   Serial.print(F(" "));
-  Serial.print(year(utc));
+  Serial.println(year(utc));
 
+  //TimeChangeRule tcr;
   time_t local = nzTZ.toLocal(utc);
   Serial.print(F("  local: "));
   Serial.print(hour(local));
@@ -254,7 +258,41 @@ void setup()
   Serial.print(monthShortStr(month(local)));
   Serial.print(F(" "));
   Serial.print(year(local));
+  Serial.print(F(" "));
+  if (nzTZ.utcIsDST(utc))
+  {
+    Serial.print(F("Daylight Time"));
+  }
+  else
+  {
+    Serial.print(F("Standard Time"));
+  }
+  Serial.println("");
 
+  sunrise.Civil();
+  int t = sunrise.Rise(8,2); // month,date - january=1 ;  t= minutes past midnight of sunrise (6 am would be 360)
+  if (t >= 0)
+  {
+    byte h = sunrise.Hour();
+    byte m = sunrise.Minute();
+    Serial.print(F("  Sunrise: "));
+    Serial.print(h, DEC);
+    Serial.print(F(":"));
+    if(m < 10) Serial.print(F("0"));
+    Serial.println(m,DEC);
+  }
+
+  t = sunrise.Set(8,2); // month,date - january=1 ; t= minutes past midnight of sunrise (6 am would be 360)
+  if(t >= 0)
+  {
+    byte h = sunrise.Hour();
+    byte m = sunrise.Minute();
+    Serial.print(F("  Sunset: "));
+    Serial.print(h, DEC);
+    Serial.print(F(":"));
+    if(m<10) Serial.print(F("0"));
+    Serial.println(m,DEC);
+  }
 
   Serial.println(F("Connecting to MQTT broker..."));
   mqtt.setServer(mqttIP, 1883);
@@ -509,17 +547,20 @@ time_t getUtcFromNtp()
   //Serial.println(F("Transmit NTP Request"));
   sendNTPpacket(ntpIP);
   uint32_t beginWait = millis();
-  while (millis() - beginWait < 1500) {
+  while (millis() - beginWait < 1500)
+  {
     int size = udp.parsePacket();
-    if (size >= NTP_PACKET_SIZE) {
+    if (size >= NTP_PACKET_SIZE)
+    {
       //Serial.println(F("Receive NTP Response"));
       udp.read((byte*)tmpBuf, NTP_PACKET_SIZE);  // read packet into the buffer
-      unsigned long secsSince1900;
-      // convert four bytes starting at location 40 to a long integer
-      secsSince1900 =  (unsigned long)tmpBuf[40] << 24;
-      secsSince1900 |= (unsigned long)tmpBuf[41] << 16;
-      secsSince1900 |= (unsigned long)tmpBuf[42] << 8;
-      secsSince1900 |= (unsigned long)tmpBuf[43];
+      unsigned long highWord = word(tmpBuf[40], tmpBuf[41]);
+      unsigned long lowWord = word(tmpBuf[42], tmpBuf[43]);
+      unsigned long secsSince1900 = highWord << 16 | lowWord;
+      //Serial.print(F("Secs since 1900: "));
+      //Serial.println(secsSince1900);
+      //Serial.print(F("Secs since 1970: "));
+      //Serial.println(secsSince1900 - 2208988800UL);
       return secsSince1900 - 2208988800UL;
     }
   }
