@@ -1,5 +1,8 @@
 ## Libraries of interest
 
+Simple way of calculating sunrise/sunset:
+http://forum.arduino.cc/index.php/topic,66426.msg487457.html#msg487457
+
 ### Timing
 
 - Simple rolling aware elapsed timing (good for simple task duration timing like lighting delays) https://github.com/pfeerick/elapsedMillis
