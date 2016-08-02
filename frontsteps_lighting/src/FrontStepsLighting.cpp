@@ -28,11 +28,12 @@ Within states [Dusk, Night, Dawn] motion
 //#include <LEDFader.h>
 #include <TimeLib.h>
 #include <TimeAlarms.h>
+#include <TimeLord.h>
 #include <Curve.h>
 #include <elapsedMillis.h>
 #include <EEPROMex.h>
 #include <Timezone.h>
-#include <Sunrise.h>
+//#include <Sunrise.h>
 
 #include <Settings.h>
 #include <Secrets.h>
@@ -87,13 +88,16 @@ int txFailCountTotal;
 elapsedMillis motionTimer;
 
 Timezone nzTZ(nzdt, nzst);
-Sunrise sunrise(-43.531637, 172.636645, 12);
+//Sunrise sunrise(-43.531637, 172.636645, 12);
+
+TimeLord tardis;
 
 // Hardware and protocol handlers
 EthernetClient ethernet;
 EthernetUDP udp;
 PubSubClient mqtt(ethernet);
 Curve ledCurve;
+
 
 const int NTP_PACKET_SIZE = 48;
 IPAddress ntpIP(NTP_SERVER_IP);
@@ -269,6 +273,28 @@ void setup()
   }
   Serial.println("");
 
+  tardis.TimeZone(12 * 60);
+  tardis.Position(LATITUDE, LONGITUDE);
+
+  byte today[] = { 0, 0, 12, 27, 10, 2012};
+
+  if (tardis.SunRise(today))
+  {
+    Serial.print("Sunrise: ");
+    Serial.print((int) today[tl_hour]);
+    Serial.print(":");
+    Serial.println((int) today[tl_minute]);
+  }
+
+  if (tardis.SunSet(today)) // if the sun will set today (it might not, in the [ant]arctic)
+  {
+    Serial.print("Sunset: ");
+    Serial.print((int) today[tl_hour]);
+    Serial.print(":");
+    Serial.println((int) today[tl_minute]);
+  }
+
+/*
   sunrise.Civil();
   int t = sunrise.Rise(8,2); // month,date - january=1 ;  t= minutes past midnight of sunrise (6 am would be 360)
   if (t >= 0)
@@ -293,7 +319,7 @@ void setup()
     if(m<10) Serial.print(F("0"));
     Serial.println(m,DEC);
   }
-
+*/
   Serial.println(F("Connecting to MQTT broker..."));
   mqtt.setServer(mqttIP, 1883);
   mqtt.setCallback(mqtt_callback);
