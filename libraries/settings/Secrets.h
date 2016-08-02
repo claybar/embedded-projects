@@ -10,3 +10,6 @@
 // Time keeping
 #define NTP_SERVER_IP { 000, 000, 000, 000 }
 
+// NZ Time Zone (Pacific/Auckland)
+#define NZST_RULE {"NZST", First, Sun, Apr, 2, 720}     //Standard time = UTC +12 hours
+#define NZDT_RULE {"NZDT", Last, Sun, Sep, 2, 780}    //Daylight time = UTC +13 hours
