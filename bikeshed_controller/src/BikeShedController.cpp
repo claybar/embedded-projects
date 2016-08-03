@@ -646,7 +646,7 @@ void statusUpdateTimer()
   mqttPublish("$uptime", tmpBuf, true);
 
   // Measure and store light level
-  sunlightLevel = analogRead(LIGHTSENSORPIN);
+  sunlightLevel = analogReadAverage(LIGHTSENSORPIN);
   snprintf(tmpBuf, sizeof(tmpBuf), "%d", sunlightLevel);
   mqttPublish("sunlight", tmpBuf);
 
