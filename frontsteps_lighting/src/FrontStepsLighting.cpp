@@ -91,6 +91,7 @@ Timezone nzTZ(nzdt, nzst);
 Sunrise sunrise(LATITUDE, LONGITUDE, 12);
 int sunriseAfterMidnight, sunsetAfterMidnight;
 
+
 // Hardware and protocol handlers
 EthernetClient ethernet;
 EthernetUDP udp;
@@ -120,7 +121,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
 
   if (strcmp(topic, "frontsteps/request") == 0)
   {
-    Serial.println(F("MQTT: request received"));
+    //Serial.println(F("MQTT: request received"));
     if (strcmp(p, "status") == 0)
     {
       Serial.println(F("MQTT: tx status"));
@@ -139,7 +140,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   }
   else
   {
-    Serial.println(F(" -> Unrecognised"));
+    Serial.println(F(" -> ??"));
   }
 
   free(p);
@@ -230,50 +231,26 @@ void setup()
   udp.begin(8888);  // Local port to listen for UDP packets
   setSyncProvider(getUtcFromNtp);
   delay(5000);
+
   /*
   time_t utc = now();
-  Serial.print(F("  utc: "));
-  Serial.print(hour(utc));
-  Serial.print(F(":"));
-  Serial.print(minute(utc));
-  Serial.print(F(":"));
-  Serial.print(second(utc));
-  Serial.print(F(" "));
-  Serial.print(dayShortStr(weekday(utc)));
-  Serial.print(F(" "));
-  Serial.print(day(utc));
-  Serial.print(F(" "));
-  Serial.print(monthShortStr(month(utc)));
-  Serial.print(F(" "));
-  Serial.println(year(utc));
-
+  Serial.print(F(" UTC: "));
+  printDateTime(utc);
+  Serial.println("");
   time_t local = nzTZ.toLocal(utc);
-  Serial.print(F("  local: "));
-  Serial.print(hour(local));
-  Serial.print(F(":"));
-  Serial.print(minute(local));
-  Serial.print(F(":"));
-  Serial.print(second(local));
-  Serial.print(F(" "));
-  Serial.print(dayShortStr(weekday(local)));
-  Serial.print(F(" "));
-  Serial.print(day(local));
-  Serial.print(F(" "));
-  Serial.print(monthShortStr(month(local)));
-  Serial.print(F(" "));
-  Serial.print(year(local));
-  Serial.print(F(" "));
+  Serial.print(F(" LOC: "));
+  printDateTime(local);
   if (nzTZ.utcIsDST(utc))
   {
-    Serial.print(F("Daylight Time"));
+    Serial.print(F(" DST"));
   }
   else
   {
-    Serial.print(F("Standard Time"));
+    Serial.print(F(" ST"));
   }
   Serial.println("");
   */
-
+  
   // Calculate sunrise/sunset for today.
   sunriseSunsetAlarm();
 
@@ -329,14 +306,14 @@ void loop()
     // Fire messages on positive edges
     if (motionAState != previousMotionAState)
     {
-      Serial.println(F("Motion: SensA"));
+      Serial.println(F("Motion:A"));
       recentActivity = true;
       mqttPublish("motion", "detected-ch1");
       updateLights();
     }
     if (motionBState != previousMotionBState)
     {
-      Serial.println(F("Motion: SensB"));
+      Serial.println(F("Motion:B"));
       recentActivity = true;
       mqttPublish("motion", "detected-ch2");
       updateLights();
@@ -350,7 +327,7 @@ void loop()
       if (motionTimer > specificSettings.lightingAfterMotionTime)
       {
         recentActivity = false;
-        Serial.println(F("Motion: Expired"));
+        Serial.println(F("Motion:Exp"));
         mqttPublish("motion", "expired");
         updateLights();
       }
@@ -363,7 +340,7 @@ void loop()
             mqttPublish("motion", "gone");
           }
           Serial.print(motionTimer / 1000);
-          Serial.print(" of ");
+          Serial.print("of");
           Serial.println(specificSettings.lightingAfterMotionTime / 1000);
           timerPrevious += 1000;
         }
@@ -393,7 +370,7 @@ void updateLights()
   */
 
   lightsLevel_t lights = off;
-  Serial.print(F("Portion: "));
+  Serial.print(F("TOD: "));
   if (portionOfDay == daytime)
     Serial.println(F("DAYTIME"));
   if (portionOfDay == evening)
@@ -402,7 +379,7 @@ void updateLights()
     Serial.println(F("NIGHT"));
   if (portionOfDay == morning)
     Serial.println(F("MORNING"));
-  Serial.print(F("Motion: "));
+  Serial.print(F("MOTION: "));
   Serial.println(recentActivity ? "YES" : "NO");
 
   if (portionOfDay == daytime)
@@ -435,19 +412,19 @@ void updateLights()
   Serial.print(F("Lights: "));
   if (lights == bright)
   {
-    Serial.println(F("bright"));
+    Serial.println(F("MAX"));
     analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelBright));
     mqttPublish("lights", "bright");
   }
   else if (lights == ambient)
   {
-    Serial.println(F("ambient"));
+    Serial.println(F("DIM"));
     analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelAmbient));
     mqttPublish("lights", "ambient");
   }
   else // lights == off
   {
-    Serial.println(F("off"));
+    Serial.println(F("OFF"));
     analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelOff));
     mqttPublish("lights", "off");
   }
@@ -459,14 +436,14 @@ boolean mqttConnect()
   //Serial.print(F("MQTT: "));
   if (success)
   {
-    Serial.println(F("good"));
+    //Serial.println(F("good"));
     // publish retained LWT so anything listening knows we are alive
     byte data[] = { "connected" };
     mqtt.publish(commonSettings.mqttWillTopic, data, 1, mqttWillRetain);
   }
   else
   {
-    //Serial.println(F("bad"));
+    Serial.println(F("MQTT:Err"));
   }
   return success;
 }
@@ -477,10 +454,9 @@ void mqttSubscribe(const char* name)
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/%s", commonSettings.mqttTopicBase, name);
 
-  //Serial.print(F("Sub: "));
-  //Serial.println(topic);
+  Serial.print(F("SUB: "));
+  Serial.println(topic);
 
-  // publish to the MQTT broker
   mqtt.subscribe(topic);
 }
 
@@ -490,16 +466,17 @@ void mqttPublish(const char* name, const char* payload)
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/status/%s", commonSettings.mqttTopicBase, name);
 
+  Serial.print(F("PUB: "));
   Serial.print(topic);
-  Serial.print(F(" "));
+  Serial.print(F(" => "));
   Serial.println(payload);
 
   // publish to the MQTT broker
   boolean success = mqtt.publish(topic, payload);
   if(!success)
   {
-    //Serial.print(F("MQTT: pub failed, state: "));
-    Serial.println(mqtt.state());
+    Serial.println(F("PUB: failed"));
+    //Serial.println(mqtt.state());
     mqttFailCount++;
   }
   else
@@ -510,14 +487,13 @@ void mqttPublish(const char* name, const char* payload)
 
 byte readI2CRegister(byte i2c_address, byte reg)
 {
-  unsigned char v;
   Wire.beginTransmission(i2c_address);
   Wire.write(reg);  // Register to read
   Wire.endTransmission();
 
   Wire.requestFrom(i2c_address, (uint8_t)1); // Read a byte
-  while(!Wire.available()) { }
-  v = Wire.read();
+  while(!Wire.available()) { } // DANGER
+  unsigned char v = Wire.read();
   return v;
 }
 
@@ -530,7 +506,8 @@ int percent2LEDInt(int p)
 /*-------- NTP ----------*/
 time_t getUtcFromNtp()
 {
-  while (udp.parsePacket() > 0) ; // discard any previously received packets
+  // discard any previously received packets
+  while (udp.parsePacket() > 0) ;
   //Serial.println(F("Transmit NTP Request"));
   sendNTPpacket(ntpIP);
   uint32_t beginWait = millis();
@@ -540,7 +517,7 @@ time_t getUtcFromNtp()
     if (size >= NTP_PACKET_SIZE)
     {
       //Serial.println(F("Receive NTP Response"));
-      udp.read((byte*)tmpBuf, NTP_PACKET_SIZE);  // read packet into the buffer
+      udp.read((byte*)tmpBuf, NTP_PACKET_SIZE);
       unsigned long highWord = word(tmpBuf[40], tmpBuf[41]);
       unsigned long lowWord = word(tmpBuf[42], tmpBuf[43]);
       unsigned long secsSince1900 = highWord << 16 | lowWord;
@@ -561,7 +538,6 @@ void sendNTPpacket(IPAddress &address)
   // set all bytes in the buffer to 0
   memset(tmpBuf, 0, NTP_PACKET_SIZE);
   // Initialize values needed to form NTP request
-  // (see URL above for details on the packets)
   tmpBuf[0] = 0b11100011;   // LI, Version, Mode
   tmpBuf[1] = 0;     // Stratum, or type of clock
   tmpBuf[2] = 6;     // Polling Interval
@@ -582,17 +558,13 @@ void timeOfDayAlarm()
 {
   //Serial.println(F("ALM: ToD"));
   // Determine the time of day
-  time_t local = nzTZ.toLocal(now());
+  time_t utc = now();
+  Serial.print(F("UTC: "));
+  printTime(hour(utc), minute(utc));
+  time_t local = nzTZ.toLocal(utc);
+  Serial.print(F("LOC: "));
+  printTime(hour(utc), minute(utc));
 
-  Serial.print(F("NOW: "));
-  Serial.print(hour(local));
-  Serial.print(F(":"));
-  Serial.println(minute(local));
-
-  // Fake sunrise/sunset for now
-  int sunrise = 8 * 60;
-  int sunset = 20 * 60;
-  // minutes
   int morningBeforeSunrise = 1;
   int morningAfterSunrise = 2;
   int eveningBeforeSunset = 4;
@@ -602,20 +574,20 @@ void timeOfDayAlarm()
   int minAfterMidnight = hour(local) * 60 + minute(local);
 
   // Morning
-  if (minAfterMidnight > (sunrise - morningBeforeSunrise) &&
-      minAfterMidnight < (sunrise + morningAfterSunrise))
+  if (minAfterMidnight > (sunriseAfterMidnight - morningBeforeSunrise) &&
+      minAfterMidnight < (sunriseAfterMidnight + morningAfterSunrise))
   {
     portionOfDay = morning;
   }
   // Day
-  else if (minAfterMidnight > (sunrise + morningBeforeSunrise) &&
-      minAfterMidnight < (sunset - eveningBeforeSunset))
+  else if (minAfterMidnight > (sunriseAfterMidnight + morningBeforeSunrise) &&
+      minAfterMidnight < (sunsetAfterMidnight - eveningBeforeSunset))
   {
     portionOfDay = daytime;
   }
   // Evening
-  else if (minAfterMidnight > (sunset - eveningBeforeSunset) &&
-      minAfterMidnight < (sunset + eveningAfterSunset))
+  else if (minAfterMidnight > (sunsetAfterMidnight - eveningBeforeSunset) &&
+      minAfterMidnight < (sunsetAfterMidnight + eveningAfterSunset))
   {
     portionOfDay = evening;
   }
@@ -631,37 +603,56 @@ void timeOfDayAlarm()
 // Calculates todays sunrise and sunset and stores globally.
 void sunriseSunsetAlarm()
 {
-  Serial.println(F("ALM: Sun"));
+  Serial.println(F("ALM:Sun"));
 
   time_t utc = now();
-  time_t local = nzTZ.toLocal(utc);
   int offset = 0;
   if (nzTZ.utcIsDST(utc))
   {
     offset = 60;
   }
+  time_t local = nzTZ.toLocal(utc);
+  unsigned char m = month(local);
+  unsigned char d = day(local);
 
-  sunriseAfterMidnight = sunrise.Rise(month(local), day(local)) + offset;
-  if (sunriseAfterMidnight > 0)
-  {
-    byte h = sunrise.Hour();
-    byte m = sunrise.Minute();
-    Serial.print(F("  Sunrise: "));
-    Serial.print(h, DEC);
-    Serial.print(F(":"));
-    if(m < 10) Serial.print(F("0"));
-    Serial.println(m,DEC);
-  }
+  // Should test if sunrise/set are valid, but since I dont live in the (ant)arctic not much point
+  sunriseAfterMidnight = sunrise.Rise(m, d) + offset;
+  Serial.print(F(" Sunrise: "));
+  printTime(sunrise.Hour(), sunrise.Minute());
 
-  sunsetAfterMidnight = sunrise.Set(month(local), day(local)) + offset;
-  if(sunsetAfterMidnight >= 0)
+  sunsetAfterMidnight = sunrise.Set(m, d) + offset;
+  Serial.print(F(" Sunset: "));
+  printTime(sunrise.Hour(), sunrise.Minute());
+}
+
+void printTime(byte hour, byte minute)
+{
+  Serial.print(hour, DEC);
+  Serial.print(F(":"));
+  if(minute < 10)
   {
-    byte h = sunrise.Hour();
-    byte m = sunrise.Minute();
-    Serial.print(F("  Sunset: "));
-    Serial.print(h, DEC);
-    Serial.print(F(":"));
-    if(m<10) Serial.print(F("0"));
-    Serial.println(m,DEC);
+    Serial.print(F("0"));
   }
+  Serial.println(minute, DEC);
+}
+
+void printDateTime(time_t t)
+{
+  Serial.print(hour(t));
+  Serial.print(F(":"));
+  byte m = minute(t);
+  if(m < 10) Serial.print(F("0"));
+  Serial.print(m);
+  Serial.print(F(":"));
+  byte s = second(t);
+  if(s < 10) Serial.print(F("0"));
+  Serial.print(s);
+  Serial.print(F(" "));
+  Serial.print(dayShortStr(weekday(t)));
+  Serial.print(F(" "));
+  Serial.print(day(t));
+  Serial.print(F(" "));
+  Serial.print(monthShortStr(month(t)));
+  Serial.print(F(" "));
+  Serial.print(year(t));
 }
