@@ -35,6 +35,7 @@ time_t getUtcFromNtp();
 void sendNTPpacket(IPAddress &address);
 
 void timeOfDayAlarm();
+void sunriseSunsetAlarm();
 void updateLights();
 
 boolean mqttConnect();
