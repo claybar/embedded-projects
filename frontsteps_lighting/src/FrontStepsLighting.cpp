@@ -61,7 +61,7 @@ const int mqttDisconnectedCountLimit = 5;
 
 // Settings storage
 commonSettings0_t commonSettings;
-frontstepsControllerSettings0_t specificSettings;
+//frontstepsControllerSettings0_t specificSettings;
 
 // Used for short-term string building
 char tmpBuf[48];
@@ -90,7 +90,6 @@ elapsedMillis motionTimer;
 Timezone nzTZ(nzdt, nzst);
 Sunrise sunrise(LATITUDE, LONGITUDE, 12);
 int sunriseAfterMidnight, sunsetAfterMidnight;
-
 
 // Hardware and protocol handlers
 EthernetClient ethernet;
@@ -191,21 +190,17 @@ void setup()
     strcpy(commonSettings.mqttWillMessage, "unexpected exit");
   }
 
-  settingsVer = EEPROM.readByte(512);
+  settingsVer = EEPROM.readByte(ADDR_FS_SETTINGS_OFFSET);
   //Serial.print(F("EEP: Specific ver: "));
   //Serial.println(settingsVer);
-  if (settingsVer == 0)
+  if (settingsVer != FRONTSTEPS_SETTINGS_VERSION)
   {
-    EEPROM.readBlock(512, specificSettings);
-  }
-  else
-  {
-    //Serial.println(F("EEP: Default specific settings"));
-    specificSettings.lightingAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
-    specificSettings.lightingLevelOff = 0;
-    specificSettings.lightingLevelAmbient = 20;
-    specificSettings.lightingLevelBright = 80;
-    //specificSettings.lightingChangeTime = 500;  // milliseconds
+    // No settings in EEPROM, so make some numbers up and write
+    EEPROM.updateLong(ADDR_FS_LIGHTING_AFTER_MOTION_TIME, 5000); // 5 * 60 * 1000;  // milliseconds
+    EEPROM.updateByte(ADDR_FS_LIGHTING_OFF_PERCENTAGE, 0);
+    EEPROM.updateByte(ADDR_FS_LIGHTING_AMBIENT_PERCENTAGE, 20);
+    EEPROM.updateByte(ADDR_FS_LIGHTING_BRIGHT_PERCENTAGE, 80);
+    EEPROM.updateByte(ADDR_FS_VERSION, FRONTSTEPS_SETTINGS_VERSION);
   }
 
   //Serial.print(F("Name: "));
@@ -250,7 +245,7 @@ void setup()
   }
   Serial.println("");
   */
-  
+
   // Calculate sunrise/sunset for today.
   sunriseSunsetAlarm();
 
@@ -324,7 +319,8 @@ void loop()
     // Test if there has been recent motion and it has been gone for a while
     if (recentActivity)
     {
-      if (motionTimer > specificSettings.lightingAfterMotionTime)
+      unsigned long lightingAfterMotionTime = EEPROM.readInt(ADDR_FS_LIGHTING_AFTER_MOTION_TIME);
+      if (motionTimer > lightingAfterMotionTime)
       {
         recentActivity = false;
         Serial.println(F("Motion:Exp"));
@@ -341,7 +337,7 @@ void loop()
           }
           Serial.print(motionTimer / 1000);
           Serial.print("of");
-          Serial.println(specificSettings.lightingAfterMotionTime / 1000);
+          Serial.println(lightingAfterMotionTime / 1000);
           timerPrevious += 1000;
         }
       }
@@ -413,19 +409,19 @@ void updateLights()
   if (lights == bright)
   {
     Serial.println(F("MAX"));
-    analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelBright));
+    analogWrite(LIGHTINGPIN, percent2LEDInt(EEPROM.readByte(ADDR_FS_LIGHTING_BRIGHT_PERCENTAGE)));
     mqttPublish("lights", "bright");
   }
   else if (lights == ambient)
   {
     Serial.println(F("DIM"));
-    analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelAmbient));
+    analogWrite(LIGHTINGPIN, percent2LEDInt(EEPROM.readByte(ADDR_FS_LIGHTING_AMBIENT_PERCENTAGE)));
     mqttPublish("lights", "ambient");
   }
   else // lights == off
   {
     Serial.println(F("OFF"));
-    analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelOff));
+    analogWrite(LIGHTINGPIN, percent2LEDInt(EEPROM.readByte(ADDR_FS_LIGHTING_OFF_PERCENTAGE)));
     mqttPublish("lights", "off");
   }
 }
