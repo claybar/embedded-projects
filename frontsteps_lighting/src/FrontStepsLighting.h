@@ -2,14 +2,14 @@
 #include <Timezone.h>
 
 // Logic of motion sensors
-#define MOTION_SENSOR HIGH
-#define MOTION_YES true
-#define MOTION_NO false
-#define ON true
-#define OFF false
+#define MOTION_SENSOR   (HIGH)
+#define MOTION_YES      (true)
+#define MOTION_NO       (false)
+#define ON              (true)
+#define OFF             (false)
 
 // Error detection
-#define WDT                    WDTO_8S
+#define WDT            (WDTO_8S)
 
 enum partsOfDay_t {
   daytime, // main portion of day (lots of light)
