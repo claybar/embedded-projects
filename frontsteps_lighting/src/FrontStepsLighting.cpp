@@ -668,7 +668,7 @@ void sendNTPpacket(IPAddress &address)
 
 void timeOfDayAlarm()
 {
-  //Serial.println(F("ALM: ToD"));
+  // Serial.println(F("ALM: ToD"));
   // Determine the time of day
   time_t utc = now();
   //Serial.print(F("UTC: "));
@@ -710,31 +710,33 @@ void timeOfDayAlarm()
 // Calculates todays sunrise and sunset and stores globally.
 void sunriseSunsetAlarm()
 {
-  //Serial.println(F("ALM:Sun"));
+  Serial.println(F("ALM:SunCalc"));
 
   time_t utc = now();
+
+  // Rise() and Set() return minutes after UTC midnight, so need to add offset if in DST
   int offset = 0;
   if (nzTZ.utcIsDST(utc))
   {
     offset = 60;
   }
+
   time_t local = nzTZ.toLocal(utc);
   unsigned char m = month(local);
   unsigned char d = day(local);
 
   // Should test if sunrise/set are valid, but since I dont live in the (ant)arctic not much point
   sunriseAfterMidnight = sunrise.Rise(m, d) + offset;
-  //Serial.print(F(" Sunrise: "));
-  //printTime(sunrise.Hour(), sunrise.Minute());
+  Serial.print(F("Sunrise: "));
+  printTime(sunrise.Hour(), sunrise.Minute());
 
   sunsetAfterMidnight = sunrise.Set(m, d) + offset;
-  //Serial.print(F(" Sunset: "));
-  //printTime(sunrise.Hour(), sunrise.Minute());
+  Serial.print(F("Sunset: "));
+  printTime(sunrise.Hour(), sunrise.Minute());
 }
 
 void printTime(byte hour, byte minute)
 {
-  /*
   Serial.print(hour, DEC);
   Serial.print(F(":"));
   if(minute < 10)
@@ -742,12 +744,10 @@ void printTime(byte hour, byte minute)
     Serial.print(F("0"));
   }
   Serial.println(minute, DEC);
-  */
 }
 
 void printDateTime(time_t t)
 {
-  /*
   Serial.print(hour(t));
   Serial.print(F(":"));
   byte m = minute(t);
@@ -765,5 +765,4 @@ void printDateTime(time_t t)
   Serial.print(monthShortStr(month(t)));
   Serial.print(F(" "));
   Serial.print(year(t));
-  */
 }
