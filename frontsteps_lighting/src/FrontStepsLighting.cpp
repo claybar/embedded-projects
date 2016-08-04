@@ -48,10 +48,6 @@ Within states [Dusk, Night, Dawn] motion
 #define MOTIONSENSORBPIN 6
 
 // MQTT setup
-//#define mqttClientId "frontsteps"
-//#define mqttTopicBase "frontsteps"
-//#define mqttWillTopic "clients/frontsteps"
-//#define mqttWillMessage "unexpected exit"
 const int mqttWillQos = 0;
 const int mqttWillRetain = 1;
 int mqttFailCount = 0;
@@ -61,7 +57,7 @@ const int mqttDisconnectedCountLimit = 5;
 
 // Settings storage
 commonSettings0_t commonSettings;
-//frontstepsControllerSettings0_t specificSettings;
+frontstepsControllerSettings0_t specificSettings;
 
 // Used for short-term string building
 char tmpBuf[48];
@@ -173,34 +169,38 @@ void setup()
   SPI.begin();
   Wire.begin();
 
-  // Read settings from EEPROM
-  uint8_t settingsVer = EEPROM.readByte(0);
+  uint8_t settingsVer = EEPROM.readByte(ADDR_COM_SETTINGS_OFFSET);
   //Serial.print(F("EEP: Common ver: "));
   //Serial.println(settingsVer);
   if (settingsVer == 0)
   {
-    EEPROM.readBlock(0, commonSettings);
+    EEPROM.readBlock(ADDR_COM_SETTINGS_OFFSET, commonSettings);
   }
   else
   {
-    //Serial.println(F("EEP: Default common settings"));
     strcpy(commonSettings.deviceName, "frontsteps");
     strcpy(commonSettings.mqttTopicBase, "frontsteps");
     strcpy(commonSettings.mqttWillTopic, "clients/frontsteps");
     strcpy(commonSettings.mqttWillMessage, "unexpected exit");
+    EEPROM.updateBlock(ADDR_COM_SETTINGS_OFFSET, commonSettings);
   }
 
   settingsVer = EEPROM.readByte(ADDR_FS_SETTINGS_OFFSET);
   //Serial.print(F("EEP: Specific ver: "));
   //Serial.println(settingsVer);
-  if (settingsVer != FRONTSTEPS_SETTINGS_VERSION)
+  if (settingsVer == 0)
+  {
+    EEPROM.readBlock(ADDR_FS_SETTINGS_OFFSET, specificSettings);
+  }
+  else
   {
     // No settings in EEPROM, so make some numbers up and write
-    EEPROM.updateLong(ADDR_FS_LIGHTING_AFTER_MOTION_TIME, 5000); // 5 * 60 * 1000;  // milliseconds
-    EEPROM.updateByte(ADDR_FS_LIGHTING_OFF_PERCENTAGE, 0);
-    EEPROM.updateByte(ADDR_FS_LIGHTING_AMBIENT_PERCENTAGE, 20);
-    EEPROM.updateByte(ADDR_FS_LIGHTING_BRIGHT_PERCENTAGE, 80);
-    EEPROM.updateByte(ADDR_FS_VERSION, FRONTSTEPS_SETTINGS_VERSION);
+    //Serial.println(F("EEP: Default specific settings"));
+    specificSettings.lightingAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
+    specificSettings.lightingLevelOff = 0;
+    specificSettings.lightingLevelAmbient = 20;
+    specificSettings.lightingLevelBright = 80;
+    EEPROM.updateBlock(ADDR_FS_SETTINGS_OFFSET, specificSettings);
   }
 
   //Serial.print(F("Name: "));
@@ -319,8 +319,7 @@ void loop()
     // Test if there has been recent motion and it has been gone for a while
     if (recentActivity)
     {
-      unsigned long lightingAfterMotionTime = EEPROM.readInt(ADDR_FS_LIGHTING_AFTER_MOTION_TIME);
-      if (motionTimer > lightingAfterMotionTime)
+      if (motionTimer > specificSettings.lightingAfterMotionTime)
       {
         recentActivity = false;
         Serial.println(F("Motion:Exp"));
@@ -337,7 +336,7 @@ void loop()
           }
           Serial.print(motionTimer / 1000);
           Serial.print("of");
-          Serial.println(lightingAfterMotionTime / 1000);
+          Serial.println(specificSettings.lightingAfterMotionTime / 1000);
           timerPrevious += 1000;
         }
       }
@@ -409,19 +408,19 @@ void updateLights()
   if (lights == bright)
   {
     Serial.println(F("MAX"));
-    analogWrite(LIGHTINGPIN, percent2LEDInt(EEPROM.readByte(ADDR_FS_LIGHTING_BRIGHT_PERCENTAGE)));
+    analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelBright));
     mqttPublish("lights", "bright");
   }
   else if (lights == ambient)
   {
     Serial.println(F("DIM"));
-    analogWrite(LIGHTINGPIN, percent2LEDInt(EEPROM.readByte(ADDR_FS_LIGHTING_AMBIENT_PERCENTAGE)));
+    analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelAmbient));
     mqttPublish("lights", "ambient");
   }
   else // lights == off
   {
     Serial.println(F("OFF"));
-    analogWrite(LIGHTINGPIN, percent2LEDInt(EEPROM.readByte(ADDR_FS_LIGHTING_OFF_PERCENTAGE)));
+    analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelOff));
     mqttPublish("lights", "off");
   }
 }
