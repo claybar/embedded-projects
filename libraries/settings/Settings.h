@@ -27,4 +27,8 @@ struct frontstepsControllerSettings0_t
   uint8_t lightingLevelOff; // percentage
   uint8_t lightingLevelAmbient; // percentage
   uint8_t lightingLevelBright;  // percentage
+  uint8_t morningBeforeSunrise;  // minutes
+  uint8_t morningAfterSunrise;  // minutes
+  uint8_t eveningBeforeSunset;  // minutes
+  uint8_t eveningAfterSunset;  // minutes
 };

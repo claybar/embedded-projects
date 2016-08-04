@@ -200,6 +200,10 @@ void setup()
     specificSettings.lightingLevelOff = 0;
     specificSettings.lightingLevelAmbient = 20;
     specificSettings.lightingLevelBright = 80;
+    specificSettings.morningBeforeSunrise = 30;
+    specificSettings.morningAfterSunrise = 30;
+    specificSettings.eveningBeforeSunset = 30;
+    specificSettings.eveningAfterSunset = 90;
     EEPROM.updateBlock(ADDR_FS_SETTINGS_OFFSET, specificSettings);
   }
 
@@ -560,29 +564,24 @@ void timeOfDayAlarm()
   Serial.print(F("LOC: "));
   printTime(hour(utc), minute(utc));
 
-  int morningBeforeSunrise = 1;
-  int morningAfterSunrise = 2;
-  int eveningBeforeSunset = 4;
-  int eveningAfterSunset = 3;
-
   // Test against rules to determine portion of day
   int minAfterMidnight = hour(local) * 60 + minute(local);
 
   // Morning
-  if (minAfterMidnight > (sunriseAfterMidnight - morningBeforeSunrise) &&
-      minAfterMidnight < (sunriseAfterMidnight + morningAfterSunrise))
+  if (minAfterMidnight > (sunriseAfterMidnight - specificSettings.morningBeforeSunrise) &&
+      minAfterMidnight < (sunriseAfterMidnight + specificSettings.morningAfterSunrise))
   {
     portionOfDay = morning;
   }
   // Day
-  else if (minAfterMidnight > (sunriseAfterMidnight + morningBeforeSunrise) &&
-      minAfterMidnight < (sunsetAfterMidnight - eveningBeforeSunset))
+  else if (minAfterMidnight > (sunriseAfterMidnight + specificSettings.morningBeforeSunrise) &&
+      minAfterMidnight < (sunsetAfterMidnight - specificSettings.eveningBeforeSunset))
   {
     portionOfDay = daytime;
   }
   // Evening
-  else if (minAfterMidnight > (sunsetAfterMidnight - eveningBeforeSunset) &&
-      minAfterMidnight < (sunsetAfterMidnight + eveningAfterSunset))
+  else if (minAfterMidnight > (sunsetAfterMidnight - specificSettings.eveningBeforeSunset) &&
+      minAfterMidnight < (sunsetAfterMidnight + specificSettings.eveningAfterSunset))
   {
     portionOfDay = evening;
   }
