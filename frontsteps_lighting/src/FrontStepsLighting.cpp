@@ -208,7 +208,7 @@ void setup()
   // Calculate sunrise/sunset for today.
   sunriseSunsetAlarm();
 
-  Serial.println(F("MQTT: Setup"));
+  //Serial.println(F("MQTT: Setup"));
   mqtt.setServer(mqttIP, 1883);
   mqtt.setCallback(mqttCallback);
   while (!mqttConnect())
@@ -263,14 +263,14 @@ void loop()
     // Fire messages on positive edges
     if (motionAState != previousMotionAState)
     {
-      Serial.println(F("Motion:A"));
+      //Serial.println(F("Motion:A"));
       recentActivity = true;
       mqttPublish("motion", "detected-ch1");
       updateLights();
     }
     if (motionBState != previousMotionBState)
     {
-      Serial.println(F("Motion:B"));
+      //Serial.println(F("Motion:B"));
       recentActivity = true;
       mqttPublish("motion", "detected-ch2");
       updateLights();
@@ -284,7 +284,7 @@ void loop()
       if (motionTimer > specificSettings.lightingAfterMotionTime)
       {
         recentActivity = false;
-        Serial.println(F("Motion:Exp"));
+        //Serial.println(F("Motion:Exp"));
         mqttPublish("motion", "expired");
         updateLights();
       }
@@ -296,9 +296,9 @@ void loop()
           {
             mqttPublish("motion", "gone");
           }
-          Serial.print(motionTimer / 1000);
-          Serial.print("of");
-          Serial.println(specificSettings.lightingAfterMotionTime / 1000);
+          //Serial.print(motionTimer / 1000);
+          //Serial.print("of");
+          //Serial.println(specificSettings.lightingAfterMotionTime / 1000);
           timerPrevious += 1000;
         }
       }
@@ -327,6 +327,7 @@ void updateLights()
   */
 
   lightsLevel_t lights = off;
+  /*
   Serial.print(F("TOD: "));
   if (portionOfDay == daytime)
     Serial.println(F("DAYTIME"));
@@ -338,6 +339,7 @@ void updateLights()
     Serial.println(F("MORNING"));
   Serial.print(F("MOTION: "));
   Serial.println(recentActivity ? "YES" : "NO");
+  */
 
   if (portionOfDay == daytime)
   {
@@ -366,22 +368,22 @@ void updateLights()
     }
   }
 
-  Serial.print(F("Lights: "));
+  //Serial.print(F("Lights: "));
   if (lights == bright)
   {
-    Serial.println(F("MAX"));
+    //Serial.println(F("MAX"));
     analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelBright));
     mqttPublish("lights", "bright");
   }
   else if (lights == ambient)
   {
-    Serial.println(F("DIM"));
+    //Serial.println(F("DIM"));
     analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelAmbient));
     mqttPublish("lights", "ambient");
   }
   else // lights == off
   {
-    Serial.println(F("OFF"));
+    //Serial.println(F("OFF"));
     analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelOff));
     mqttPublish("lights", "off");
   }
@@ -400,7 +402,7 @@ boolean mqttConnect()
   }
   else
   {
-    Serial.println(F("MQTT:Err"));
+    //Serial.println(F("MQTT:Err"));
   }
   return success;
 }
@@ -411,8 +413,8 @@ void mqttSubscribe(const char* name)
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/%s", commonSettings.mqttTopicBase, name);
 
-  Serial.print(F("SUB: "));
-  Serial.println(topic);
+  //Serial.print(F("SUB: "));
+  //Serial.println(topic);
 
   mqtt.subscribe(topic);
 }
@@ -454,16 +456,6 @@ void mqttPublish(const char* name, const char* payload, bool retained)
   }
 }
 
-
-
-
-
-
-
-
-
-
-
 void mqttCallback(char* topic, byte* payload, unsigned int length)
 {
   bool updateRetained = false;
@@ -478,33 +470,24 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
   }
   p[length] = '\0';
 
+  /*
   Serial.print(F("MQTT: rx: "));
   Serial.print(topic);
   Serial.print(F(" => "));
   Serial.print(p);
   Serial.println();
+  */
 
   // Strip off the "frontsteps/" bit
   char* topicStrip = topic + strlen(commonSettings.mqttTopicBase) + 1;
 
   if (strcmp(topicStrip, "request") == 0)
   {
-    //Serial.println(F("MQTT: request received"));
-    if (strcmp(p, "status") == 0)
-    {
-      Serial.println(F("MQTT: tx status"));
-    }
-
-    snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    mqttPublish("mac", tmpBuf);
-
-    IPAddress ip = Ethernet.localIP();
-    snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-    mqttPublish("ip", tmpBuf);
+    updateRetained = true;
   }
   else if (strcmp(topicStrip, "retain/set") == 0)
   {
-    Serial.println(F("MQTT: Retain EEPROM"));
+    //Serial.println(F("MQTT: Retain EEPROM"));
     EEPROM.updateBlock(ADDR_COM_SETTINGS_OFFSET, commonSettings);
     EEPROM.updateBlock(ADDR_FS_SETTINGS_OFFSET, specificSettings);
     updateRetained = true;
@@ -563,14 +546,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
   }
   else
   {
-    Serial.println(F(" -> ??"));
+    //Serial.println(F(" -> ??"));
   }
 
   free(p);
 
   if (updateRetained)
   {
-    //publishAllRetained();
+    publishAllRetained();
   }
 }
 
@@ -727,7 +710,7 @@ void timeOfDayAlarm()
 // Calculates todays sunrise and sunset and stores globally.
 void sunriseSunsetAlarm()
 {
-  Serial.println(F("ALM:Sun"));
+  //Serial.println(F("ALM:Sun"));
 
   time_t utc = now();
   int offset = 0;
@@ -751,6 +734,7 @@ void sunriseSunsetAlarm()
 
 void printTime(byte hour, byte minute)
 {
+  /*
   Serial.print(hour, DEC);
   Serial.print(F(":"));
   if(minute < 10)
@@ -758,10 +742,12 @@ void printTime(byte hour, byte minute)
     Serial.print(F("0"));
   }
   Serial.println(minute, DEC);
+  */
 }
 
 void printDateTime(time_t t)
 {
+  /*
   Serial.print(hour(t));
   Serial.print(F(":"));
   byte m = minute(t);
@@ -779,4 +765,5 @@ void printDateTime(time_t t)
   Serial.print(monthShortStr(month(t)));
   Serial.print(F(" "));
   Serial.print(year(t));
+  */
 }
