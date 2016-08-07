@@ -30,6 +30,7 @@ TimeChangeRule nzst = NZST_RULE;
 int serial_putchar(char c, FILE* f);
 byte readI2CRegister(byte i2c_address, byte reg);
 int percent2LEDInt(int p);
+void timeToTmpBuf(uint16_t minsAfterMidnight);
 void printTime(byte h, byte m);
 void printDateTime(time_t t);
 

@@ -204,8 +204,6 @@ void setup()
   Serial.println("");
   */
 
-  // Calculate sunrise/sunset for today.
-  sunriseSunsetAlarm();
 
   //Serial.println(F("MQTT: Setup"));
   mqtt.setServer(mqttIP, 1883);
@@ -238,10 +236,10 @@ void setup()
   portionOfDay = night;
   motionTimer = 0;
 
+  // Fire things once to get started
   timeOfDayAlarm();
+  sunriseSunsetAlarm();
   updateLights();
-
-  // Fire the set of retained messages
   publishConfigAndSettings();
 }
 
@@ -607,10 +605,10 @@ void publishConfigAndSettings()
 
 void publishSunriseSunset()
 {
-  snprintf(tmpBuf, sizeof(tmpBuf), "%02d:%02d", sunriseAfterMidnight / 60, sunriseAfterMidnight % 60);
+  timeToTmpBuf(sunriseAfterMidnight);
   mqttPublish("$sunrise", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%02d:%02d", sunsetAfterMidnight / 60, sunsetAfterMidnight % 60);
+  timeToTmpBuf(sunsetAfterMidnight);
   mqttPublish("$sunset", tmpBuf, true);
 }
 
@@ -695,6 +693,9 @@ void timeOfDayAlarm()
   //Serial.print(F("LOC: "));
   //printTime(hour(local), minute(local));
 
+  timeToTmpBuf(hour(local) * 60 + minute(local));
+  mqttPublish("timeofday", tmpBuf, false);
+
   // Test against rules to determine portion of day
   uint16_t minAfterMidnight = hour(local) * 60 + minute(local);
   //Serial.print(F(" Portion: "));
@@ -761,6 +762,12 @@ void sunriseSunsetAlarm()
   //printTime(sunrise.Hour(), sunrise.Minute());
 
   publishSunriseSunset();
+}
+
+// This populates the global tmpBuf
+void timeToTmpBuf(uint16_t minsAfterMidnight)
+{
+  snprintf(tmpBuf, sizeof(tmpBuf), "%02d:%02d", minsAfterMidnight / 60, minsAfterMidnight % 60);
 }
 
 void printTime(byte hour, byte minute)
