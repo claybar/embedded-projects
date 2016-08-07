@@ -215,6 +215,7 @@ void setup()
     delay(5000);
   }
   mqttSubscribe("request");
+  mqttSubscribe("+/set");
 
   //Serial.println(F("ALM: Setup"));
   // Status sent every per minute
@@ -492,7 +493,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
   }
   else if (strcmp(topicStrip, "retain/set") == 0)
   {
-    //Serial.println(F("MQTT: Retain EEPROM"));
     EEPROM.updateBlock(ADDR_COM_SETTINGS_OFFSET, commonSettings);
     EEPROM.updateBlock(ADDR_FS_SETTINGS_OFFSET, specificSettings);
     updateRetained = true;
@@ -736,7 +736,7 @@ void timeOfDayAlarm()
 // Calculates todays sunrise and sunset and stores globally.
 void sunriseSunsetAlarm()
 {
-  Serial.println(F("ALM:SunCalc"));
+  //Serial.println(F("ALM:SunCalc"));
 
   time_t utc = now();
 
