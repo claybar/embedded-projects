@@ -704,7 +704,7 @@ void timeOfDayAlarm()
   {
     portionOfDay = morning;
     //Serial.println(F("M"));
-    mqttPublish("$portionofday", "morning", true);
+    mqttPublish("portionofday", "morning", false);
   }
   // Day
   else if (minAfterMidnight > (sunriseAfterMidnight + specificSettings.morningAfterSunrise) &&
@@ -712,7 +712,7 @@ void timeOfDayAlarm()
   {
     portionOfDay = daytime;
     //Serial.println(F("D"));
-    mqttPublish("$portionofday", "day", true);
+    mqttPublish("portionofday", "day", false);
   }
   // Evening
   else if (minAfterMidnight > (sunsetAfterMidnight - specificSettings.eveningBeforeSunset) &&
@@ -720,7 +720,7 @@ void timeOfDayAlarm()
   {
     portionOfDay = evening;
     //Serial.println(F("E"));
-    mqttPublish("$portionofday", "evening", true);
+    mqttPublish("portionofday", "evening", false);
   }
   // Night
   else
@@ -729,7 +729,7 @@ void timeOfDayAlarm()
   {
     portionOfDay = night;
     //Serial.println(F("N"));
-    mqttPublish("$portionofday", "night", true);
+    mqttPublish("portionofday", "night", false);
   }
 }
 
