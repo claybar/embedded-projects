@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 unsigned int version;
 
 #define ADDR_COM_SETTINGS_OFFSET      (0)     // settings starting address
@@ -9,6 +11,7 @@ struct commonSettings0_t
   char mqttWillTopic[20];
   char mqttWillMessage[16];
 };
+
 
 struct bikeshedControllerSettings0_t
 {
@@ -24,11 +27,11 @@ struct frontstepsControllerSettings0_t
 {
   const uint8_t version = 0;
   unsigned long lightingAfterMotionTime;  // milliseconds
-  uint8_t lightingLevelOff; // percentage
+  //uint8_t lightingLevelOff; // percentage
   uint8_t lightingLevelAmbient; // percentage
   uint8_t lightingLevelBright;  // percentage
-  uint8_t morningBeforeSunrise;  // minutes
-  uint8_t morningAfterSunrise;  // minutes
-  uint8_t eveningBeforeSunset;  // minutes
-  uint8_t eveningAfterSunset;  // minutes
+  uint16_t morningStart;        // minutes after midnight
+  uint16_t morningAfterSunrise; // minutes
+  uint16_t eveningBeforeSunset; // minutes
+  uint16_t eveningEnd;          // minutes after midnight
 };

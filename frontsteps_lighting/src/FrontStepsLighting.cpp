@@ -62,7 +62,7 @@ frontstepsControllerSettings0_t specificSettings;
 // Used for short-term string building
 char tmpBuf[48];
 // Used to redirect stdout to the serial port
-FILE serial_stdout;
+//FILE serial_stdout;
 
 // Storage, will be set by onboard i2c device and DHCP
 byte mac[] = { 0, 0, 0, 0, 0, 0 };
@@ -91,7 +91,7 @@ int sunriseAfterMidnight, sunsetAfterMidnight;
 EthernetClient ethernet;
 EthernetUDP udp;
 PubSubClient mqtt(ethernet);
-Curve ledCurve;
+//Curve ledCurve;
 
 const int NTP_PACKET_SIZE = 48;
 IPAddress ntpIP(NTP_SERVER_IP);
@@ -152,13 +152,12 @@ void setup()
     // No settings in EEPROM, so make some numbers up and write
     //Serial.println(F("EEP: Default specific settings"));
     specificSettings.lightingAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
-    specificSettings.lightingLevelOff = 0;
     specificSettings.lightingLevelAmbient = 20;
     specificSettings.lightingLevelBright = 80;
-    specificSettings.morningBeforeSunrise = 30;
-    specificSettings.morningAfterSunrise = 30;
-    specificSettings.eveningBeforeSunset = 30;
-    specificSettings.eveningAfterSunset = 90;
+    specificSettings.morningStart = 7 * 60; // minutes after midnight
+    specificSettings.morningAfterSunrise = 10;
+    specificSettings.eveningBeforeSunset = 10;
+    specificSettings.eveningEnd = 21 * 60; // minutes after midnight
     EEPROM.updateBlock(ADDR_FS_SETTINGS_OFFSET, specificSettings);
   }
 
@@ -218,9 +217,13 @@ void setup()
   mqttSubscribe("request");
 
   //Serial.println(F("ALM: Setup"));
-  Alarm.timerRepeat(60, timeOfDayAlarm);  // Status sent 4x per minute
-  //Alarm.alarmRepeat(3, 3, 0, sunriseSunsetAlarm);  // Sunrise & sunset calculated at 3:03 am
-  Alarm.alarmRepeat(3 - 12 + 24, 0, 0, sunriseSunsetAlarm);  // Sunrise & sunset calculated at about 3am
+  // Status sent every per minute
+  Alarm.timerRepeat(60, timeOfDayAlarm);
+  // Sunrise & sunset calculated every 6 hours
+  Alarm.timerRepeat(60 * 60 * 6, sunriseSunsetAlarm);
+  // Sunrise & sunset calculated at about 3am
+  // Alarms work in Utc, so add 12 hours for timezone.
+  //Alarm.alarmRepeat(3 + 12, 10, 0, sunriseSunsetAlarm);
 
   // enable the watchdog timer - 8s timeout
   //Serial.print(F("WDT: "));
@@ -234,10 +237,11 @@ void setup()
   portionOfDay = night;
   motionTimer = 0;
 
+  timeOfDayAlarm();
   updateLights();
 
   // Fire the set of retained messages
-  publishAllRetained();
+  publishConfigAndSettings();
 }
 
 void loop()
@@ -373,18 +377,19 @@ void updateLights()
   {
     //Serial.println(F("MAX"));
     analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelBright));
-    mqttPublish("lights", "bright");
+    mqttPublish("lights", "full");
   }
   else if (lights == ambient)
   {
     //Serial.println(F("DIM"));
     analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelAmbient));
-    mqttPublish("lights", "ambient");
+    mqttPublish("lights", "amb");
   }
   else // lights == off
   {
     //Serial.println(F("OFF"));
-    analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelOff));
+    //analogWrite(LIGHTINGPIN, percent2LEDInt(specificSettings.lightingLevelOff));
+    analogWrite(LIGHTINGPIN, 0);
     mqttPublish("lights", "off");
   }
 }
@@ -393,6 +398,7 @@ boolean mqttConnect()
 {
   boolean success = mqtt.connect(commonSettings.deviceName, MQTT_USERNAME, MQTT_PASSWORD, commonSettings.mqttWillTopic, mqttWillQos, mqttWillRetain, commonSettings.mqttWillMessage);
   //Serial.print(F("MQTT: "));
+  /*
   if (success)
   {
     //Serial.println(F("good"));
@@ -404,6 +410,7 @@ boolean mqttConnect()
   {
     //Serial.println(F("MQTT:Err"));
   }
+  */
   return success;
 }
 
@@ -430,9 +437,8 @@ void mqttPublish(const char* name, const char* payload, bool retained)
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/%s", commonSettings.mqttTopicBase, name);
 
-  /*
   Serial.print(F("MQTT: "));
-  Serial.print(name);
+  Serial.print(topic);
   Serial.print(F(" "));
   Serial.print(payload);
   if (retained)
@@ -440,10 +446,9 @@ void mqttPublish(const char* name, const char* payload, bool retained)
     Serial.print(F(" (retained)"));
   }
   Serial.println("");
-  */
 
   // publish to the MQTT broker
-  boolean success = mqtt.publish(name, payload, retained);
+  boolean success = mqtt.publish(topic, payload, retained);
   if(!success)
   {
     //Serial.print(F("MQTT: pub failed, state: "));
@@ -515,6 +520,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
     }
     updateRetained = true;
   }
+  /*
   else if (strcmp(topicStrip, "lightsoff/set") == 0)
   {
     int v = atoi(p);
@@ -524,9 +530,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
     }
     updateRetained = true;
   }
-  else if (strcmp(topicStrip, "morningbeforesunrise/set") == 0)
+  */
+  else if (strcmp(topicStrip, "morningstart/set") == 0)
   {
-    specificSettings.morningBeforeSunrise = atoi(p);
+    specificSettings.morningStart = atoi(p);
     updateRetained = true;
   }
   else if (strcmp(topicStrip, "morningaftersunrise/set") == 0)
@@ -539,9 +546,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
     specificSettings.eveningBeforeSunset = atoi(p);
     updateRetained = true;
   }
-  else if (strcmp(topicStrip, "eveningaftersunset/set") == 0)
+  else if (strcmp(topicStrip, "eveningend/set") == 0)
   {
-    specificSettings.eveningAfterSunset = atoi(p);
+    specificSettings.eveningEnd = atoi(p);
     updateRetained = true;
   }
   else
@@ -553,19 +560,20 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
 
   if (updateRetained)
   {
-    publishAllRetained();
+    publishConfigAndSettings();
   }
 }
 
-void publishAllRetained()
+void publishConfigAndSettings()
 {
+  /*
   snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   mqttPublish("$mac", tmpBuf, true);
 
   IPAddress ip = Ethernet.localIP();
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
   mqttPublish("$localip", tmpBuf, true);
-
+  */
   snprintf(tmpBuf, sizeof(tmpBuf), "%d", commonSettings.version);
   mqttPublish("$commonsettingsversion", tmpBuf, true);
 
@@ -581,20 +589,29 @@ void publishAllRetained()
   snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.lightingLevelAmbient);
   mqttPublish("$lightsambient", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.lightingLevelOff);
-  mqttPublish("$lightsoff", tmpBuf, true);
+  //snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.lightingLevelOff);
+  //mqttPublish("$lightsoff", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.morningBeforeSunrise);
-  mqttPublish("$morningbeforesunrise", tmpBuf, true);
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.morningStart);
+  mqttPublish("$morningstart", tmpBuf, true);
 
   snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.morningAfterSunrise);
-  mqttPublish("$morningaftersunrise", tmpBuf, true);
+  mqttPublish("$aftersunrise", tmpBuf, true);
 
   snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.eveningBeforeSunset);
-  mqttPublish("$eveningbeforesunset", tmpBuf, true);
+  mqttPublish("$beforesunset", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.eveningAfterSunset);
-  mqttPublish("$eveningaftersunset", tmpBuf, true);
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.eveningEnd);
+  mqttPublish("$eveningend", tmpBuf, true);
+}
+
+void publishSunriseSunset()
+{
+  snprintf(tmpBuf, sizeof(tmpBuf), "%02d:%02d", sunriseAfterMidnight / 60, sunriseAfterMidnight % 60);
+  mqttPublish("$sunrise", tmpBuf, true);
+
+  snprintf(tmpBuf, sizeof(tmpBuf), "%02d:%02d", sunsetAfterMidnight / 60, sunsetAfterMidnight % 60);
+  mqttPublish("$sunset", tmpBuf, true);
 }
 
 byte readI2CRegister(byte i2c_address, byte reg)
@@ -612,7 +629,8 @@ byte readI2CRegister(byte i2c_address, byte reg)
 // NO ERROR CHECKING - MUST BE 0-100
 int percent2LEDInt(int p)
 {
-  return ledCurve.exponential(p);
+  //return ledCurve.exponential(p);
+  return(p * 2);
 }
 
 /*-------- NTP ----------*/
@@ -675,28 +693,34 @@ void timeOfDayAlarm()
   //printTime(hour(utc), minute(utc));
   time_t local = nzTZ.toLocal(utc);
   //Serial.print(F("LOC: "));
-  //printTime(hour(utc), minute(utc));
+  //printTime(hour(local), minute(local));
 
   // Test against rules to determine portion of day
-  int minAfterMidnight = hour(local) * 60 + minute(local);
-
+  uint16_t minAfterMidnight = hour(local) * 60 + minute(local);
+  //Serial.print(F(" Portion: "));
   // Morning
-  if (minAfterMidnight > (sunriseAfterMidnight - specificSettings.morningBeforeSunrise) &&
+  if (minAfterMidnight > specificSettings.morningStart &&
       minAfterMidnight < (sunriseAfterMidnight + specificSettings.morningAfterSunrise))
   {
     portionOfDay = morning;
+    //Serial.println(F("M"));
+    mqttPublish("$portionofday", "morning", true);
   }
   // Day
-  else if (minAfterMidnight > (sunriseAfterMidnight + specificSettings.morningBeforeSunrise) &&
+  else if (minAfterMidnight > (sunriseAfterMidnight + specificSettings.morningAfterSunrise) &&
       minAfterMidnight < (sunsetAfterMidnight - specificSettings.eveningBeforeSunset))
   {
     portionOfDay = daytime;
+    //Serial.println(F("D"));
+    mqttPublish("$portionofday", "day", true);
   }
   // Evening
   else if (minAfterMidnight > (sunsetAfterMidnight - specificSettings.eveningBeforeSunset) &&
-      minAfterMidnight < (sunsetAfterMidnight + specificSettings.eveningAfterSunset))
+      minAfterMidnight < specificSettings.eveningEnd)
   {
     portionOfDay = evening;
+    //Serial.println(F("E"));
+    mqttPublish("$portionofday", "evening", true);
   }
   // Night
   else
@@ -704,6 +728,8 @@ void timeOfDayAlarm()
   //    minAfterMidnight > (sunset + eveningAfterSunset))
   {
     portionOfDay = night;
+    //Serial.println(F("N"));
+    mqttPublish("$portionofday", "night", true);
   }
 }
 
@@ -727,12 +753,14 @@ void sunriseSunsetAlarm()
 
   // Should test if sunrise/set are valid, but since I dont live in the (ant)arctic not much point
   sunriseAfterMidnight = sunrise.Rise(m, d) + offset;
-  Serial.print(F("Sunrise: "));
-  printTime(sunrise.Hour(), sunrise.Minute());
+  //Serial.print(F("Sunrise: "));
+  //printTime(sunrise.Hour(), sunrise.Minute());
 
   sunsetAfterMidnight = sunrise.Set(m, d) + offset;
-  Serial.print(F("Sunset: "));
-  printTime(sunrise.Hour(), sunrise.Minute());
+  //Serial.print(F("Sunset: "));
+  //printTime(sunrise.Hour(), sunrise.Minute());
+
+  publishSunriseSunset();
 }
 
 void printTime(byte hour, byte minute)

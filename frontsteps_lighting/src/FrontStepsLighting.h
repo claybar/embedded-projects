@@ -45,4 +45,7 @@ void mqttSubscribe(const char* name);
 void mqttPublish(const char* name, const char* payload);
 void mqttPublish(const char* name, const char* payload, bool retained);
 void mqttCallback(char* topic, byte* payload, unsigned int length);
-void publishAllRetained();
+
+void publishConfigAndSettings();
+void publishSunriseSunset();
+//void publishAllRetained();
