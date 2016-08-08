@@ -49,4 +49,5 @@ void mqttCallback(char* topic, byte* payload, unsigned int length);
 
 void publishConfigAndSettings();
 void publishSunriseSunset();
+void publishPortionOfDay(const char* portion);
 //void publishAllRetained();

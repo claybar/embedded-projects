@@ -133,11 +133,13 @@ void setup()
   }
   else
   {
+    /*
     strcpy(commonSettings.deviceName, "frontsteps");
     strcpy(commonSettings.mqttTopicBase, "frontsteps");
     strcpy(commonSettings.mqttWillTopic, "clients/frontsteps");
     strcpy(commonSettings.mqttWillMessage, "unexpected exit");
     EEPROM.updateBlock(ADDR_COM_SETTINGS_OFFSET, commonSettings);
+    */
   }
 
   settingsVer = EEPROM.readByte(ADDR_FS_SETTINGS_OFFSET);
@@ -149,6 +151,7 @@ void setup()
   }
   else
   {
+    /*
     // No settings in EEPROM, so make some numbers up and write
     //Serial.println(F("EEP: Default specific settings"));
     specificSettings.lightingAfterMotionTime = 5000; // 5 * 60 * 1000;  // milliseconds
@@ -159,6 +162,7 @@ void setup()
     specificSettings.eveningBeforeSunset = 10;
     specificSettings.eveningEnd = 21 * 60; // minutes after midnight
     EEPROM.updateBlock(ADDR_FS_SETTINGS_OFFSET, specificSettings);
+    */
   }
 
   //Serial.print(F("Name: "));
@@ -612,6 +616,11 @@ void publishSunriseSunset()
   mqttPublish("$sunset", tmpBuf, true);
 }
 
+void publishPortionOfDay(const char* portion)
+{
+  mqttPublish("portionofday", portion, false);
+}
+
 byte readI2CRegister(byte i2c_address, byte reg)
 {
   Wire.beginTransmission(i2c_address);
@@ -705,7 +714,8 @@ void timeOfDayAlarm()
   {
     portionOfDay = morning;
     //Serial.println(F("M"));
-    mqttPublish("portionofday", "morning", false);
+    publishPortionOfDay("morning");
+    //mqttPublish("portionofday", "morning", false);
   }
   // Day
   else if (minAfterMidnight > (sunriseAfterMidnight + specificSettings.morningAfterSunrise) &&
@@ -713,7 +723,8 @@ void timeOfDayAlarm()
   {
     portionOfDay = daytime;
     //Serial.println(F("D"));
-    mqttPublish("portionofday", "day", false);
+    publishPortionOfDay("day");
+    //mqttPublish("portionofday", "day", false);
   }
   // Evening
   else if (minAfterMidnight > (sunsetAfterMidnight - specificSettings.eveningBeforeSunset) &&
@@ -721,7 +732,8 @@ void timeOfDayAlarm()
   {
     portionOfDay = evening;
     //Serial.println(F("E"));
-    mqttPublish("portionofday", "evening", false);
+    publishPortionOfDay("evening");
+    //mqttPublish("portionofday", "evening", false);
   }
   // Night
   else
@@ -730,8 +742,13 @@ void timeOfDayAlarm()
   {
     portionOfDay = night;
     //Serial.println(F("N"));
-    mqttPublish("portionofday", "night", false);
+    publishPortionOfDay("night");
+    //mqttPublish("portionofday", "night", false);
   }
+
+  // Uptime - wraps after 50 days or so
+  snprintf(tmpBuf, sizeof(tmpBuf), "%lu", millis() / 1000);
+  mqttPublish("$uptime", tmpBuf, true);
 }
 
 // Calculates todays sunrise and sunset and stores globally.
