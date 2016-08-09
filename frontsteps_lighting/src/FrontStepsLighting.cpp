@@ -135,7 +135,7 @@ void setup()
   {
     /*
     strcpy(commonSettings.deviceName, "frontsteps");
-    strcpy(commonSettings.mqttTopicBase, "frontsteps");
+    strcpy(commonSettings.mqttTopicBase, "devices");
     strcpy(commonSettings.mqttWillTopic, "clients/frontsteps");
     strcpy(commonSettings.mqttWillMessage, "unexpected exit");
     EEPROM.updateBlock(ADDR_COM_SETTINGS_OFFSET, commonSettings);
@@ -419,9 +419,9 @@ boolean mqttConnect()
 
 void mqttSubscribe(const char* name)
 {
-  // build the MQTT topic: mqttTopicBase/name
+  // build the MQTT topic: mqttTopicBase/deviceName/name
   char topic[64];
-  snprintf(topic, sizeof(topic), "%s/%s", commonSettings.mqttTopicBase, name);
+  snprintf(topic, sizeof(topic), "%s/%s/%s", commonSettings.mqttTopicBase, commonSettings.deviceName, name);
 
   //Serial.print(F("SUB: "));
   //Serial.println(topic);
@@ -438,7 +438,7 @@ void mqttPublish(const char* name, const char* payload)
 void mqttPublish(const char* name, const char* payload, bool retained)
 {
   char topic[64];
-  snprintf(topic, sizeof(topic), "%s/%s", commonSettings.mqttTopicBase, name);
+  snprintf(topic, sizeof(topic), "%s/%s/%s", commonSettings.mqttTopicBase, commonSettings.deviceName, name);
 
   Serial.print(F("MQTT: "));
   Serial.print(topic);
@@ -486,8 +486,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
   Serial.println();
   */
 
-  // Strip off the "frontsteps/" bit
-  char* topicStrip = topic + strlen(commonSettings.mqttTopicBase) + 1;
+  // Strip off the "devices/frontsteps/" bit
+  char* topicStrip = topic + strlen(commonSettings.mqttTopicBase) + strlen(commonSettings.deviceName) + 2;
 
   if (strcmp(topicStrip, "request") == 0)
   {
