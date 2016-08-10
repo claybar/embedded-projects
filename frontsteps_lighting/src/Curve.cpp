@@ -24,6 +24,19 @@ const uint8_t Curve::etable[101] PROGMEM =
 155,164,173,183,193,204,216,228,241,255
 };
 
-uint8_t Curve::exponential(uint8_t i) {
- return pgm_read_byte(&etable[i]);
+const uint8_t Curve::qetable[21] PROGMEM =
+{
+  0,
+  1,  2,  3,  4,  5,  6,  7,  9, 12, 16,
+ 21, 28, 37, 48, 64, 84,111,147,193,255
+};
+
+uint8_t Curve::exponential(uint8_t i)
+{
+  return pgm_read_byte(&etable[i]);
+}
+
+uint8_t Curve::quasiExp(uint8_t i)
+{
+ return pgm_read_byte(&qetable[i / 5]);
 }
