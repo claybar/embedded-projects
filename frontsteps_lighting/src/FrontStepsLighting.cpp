@@ -556,6 +556,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
 
 void publishConfigAndSettings()
 {
+  mqttPublish("$name", DEVICE_FRIENDLY_NAME, true);
+  mqttPublish("$fwversion", FIRMWARE_VERSION, true);
+
   /*
   snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   mqttPublish("$mac", tmpBuf, true);
@@ -564,7 +567,7 @@ void publishConfigAndSettings()
   IPAddress ip = Ethernet.localIP();
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
   mqttPublish("$localip", tmpBuf, true);
-  
+
   uint16ToTmpBuf(commonSettings.version);
   mqttPublish("$commonsettingsversion", tmpBuf, true);
 
@@ -735,6 +738,12 @@ void timeOfDayAlarm()
   // Uptime - wraps after 50 days or so
   uint32ToTmpBuf(millis() / 1000);
   mqttPublish("$uptime", tmpBuf, true);
+
+  // Check for repeated MQTT failures, if so restart via the dog
+  if (mqttFailCount > MQTT_TX_FAIL_LIMIT)
+  {
+    while(1);  // Infinte loop so the watchdog will kick in
+  }
 }
 
 // Calculates todays sunrise and sunset and stores globally.
