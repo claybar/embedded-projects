@@ -1,4 +1,22 @@
 /*
+Controller for the LED lights of my frontsteps.  Light output level determined by a
+combination of motion sensors and time of day.
+
+Hardware consists of:
+  - Freetronics Etherten (Uno with built in ethernet controller)
+  - Custom shield with 2x motion IO interface
+  - Single channel 12V mosfet driven light output
+
+There are four time periods defined each day, light output within each time state
+determined by the OR combination of the motion sense inputs:
+
+  - Night
+  - Morning
+  - Day
+  - Evening
+
+
+
 Overall operation implemeted as a FSM.
 
 States:
@@ -20,23 +38,21 @@ Within states [Dusk, Night, Dawn] motion
 
 #include <Arduino.h>
 #include <avr/wdt.h>
-#include <EtherTen.h>
-#include <SPI.h>
-#include <Wire.h>
+
+#include <EEPROMex.h>
+#include <elapsedMillis.h>
 #include <Ethernet.h>
 #include <PubSubClient.h>
-//#include <LEDFader.h>
+#include <SPI.h>
+#include <Sunrise.h>
 #include <TimeLib.h>
 #include <TimeAlarms.h>
-//#include <TimeLord.h>
-#include <Curve.h>
-#include <elapsedMillis.h>
-#include <EEPROMex.h>
 #include <Timezone.h>
-#include <Sunrise.h>
+#include <Wire.h>
 
-#include <Settings.h>
+#include <EtherTen.h>
 #include <Secrets.h>
+#include <Settings.h>
 
 #include "FrontStepsLighting.h"
 #include "Curve.h"
@@ -454,7 +470,7 @@ void mqttPublish(const char* name, const char* payload, bool retained)
   Serial.print(payload);
   if (retained)
   {
-    Serial.print(F(" (retained)"));
+    Serial.print(F(" (R)"));
   }
   Serial.println("");
 
@@ -476,10 +492,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
 {
   bool updateRetained = false;
 
+  // Copy the payload to a local buffer
   // Allocate the correct amount of memory for the payload copy
   char* p = (char*)malloc(length + 1);
-
-  // Copy the payload to the new buffer
   for (unsigned int i = 0; i < length; i++)
   {
     p[i] = (char)payload[i];
@@ -530,17 +545,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
     }
     updateRetained = true;
   }
-  /*
-  else if (strcmp(topicStrip, "lightsoff/set") == 0)
-  {
-    int v = atoi(p);
-    if (v >= 0 && v <= 100)
-    {
-      specificSettings.lightingLevelOff = v;
-    }
-    updateRetained = true;
-  }
-  */
   else if (strcmp(topicStrip, "morningstart/set") == 0)
   {
     specificSettings.morningStart = atoi(p);
@@ -576,52 +580,53 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
 
 void publishConfigAndSettings()
 {
+  mqttPublish("$name", DEVICE_FRIENDLY_NAME, true);
+  mqttPublish("$fwversion", FIRMWARE_VERSION, true);
+
   /*
   snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   mqttPublish("$mac", tmpBuf, true);
+  */
 
   IPAddress ip = Ethernet.localIP();
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
   mqttPublish("$localip", tmpBuf, true);
-  */
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", commonSettings.version);
+
+  uint16ToTmpBuf(commonSettings.version);
   mqttPublish("$commonsettingsversion", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.version);
+  uint16ToTmpBuf(specificSettings.version);
   mqttPublish("$specificsettingsversion", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%lu", specificSettings.lightingAfterMotionTime / 1000);
-  mqttPublish("$lightsoffdelay", tmpBuf, true);
+  uint16ToTmpBuf(specificSettings.lightingAfterMotionTime / 1000);
+  mqttPublish("lightsoffdelay", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.lightingLevelBright);
-  mqttPublish("$lightsbright", tmpBuf, true);
+  uint16ToTmpBuf(specificSettings.lightingLevelBright);
+  mqttPublish("lightsbright", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.lightingLevelAmbient);
-  mqttPublish("$lightsambient", tmpBuf, true);
+  uint16ToTmpBuf(specificSettings.lightingLevelAmbient);
+  mqttPublish("lightsambient", tmpBuf, true);
 
-  //snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.lightingLevelOff);
-  //mqttPublish("$lightsoff", tmpBuf, true);
+  uint16ToTmpBuf(specificSettings.morningStart);
+  mqttPublish("morningstart", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.morningStart);
-  mqttPublish("$morningstart", tmpBuf, true);
+  uint16ToTmpBuf(specificSettings.morningAfterSunrise);
+  mqttPublish("aftersunrise", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.morningAfterSunrise);
-  mqttPublish("$aftersunrise", tmpBuf, true);
+  uint16ToTmpBuf(specificSettings.eveningBeforeSunset);
+  mqttPublish("beforesunset", tmpBuf, true);
 
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.eveningBeforeSunset);
-  mqttPublish("$beforesunset", tmpBuf, true);
-
-  snprintf(tmpBuf, sizeof(tmpBuf), "%d", specificSettings.eveningEnd);
-  mqttPublish("$eveningend", tmpBuf, true);
+  uint16ToTmpBuf(specificSettings.eveningEnd);
+  mqttPublish("eveningend", tmpBuf, true);
 }
 
 void publishSunriseSunset()
 {
   timeToTmpBuf(sunriseAfterMidnight);
-  mqttPublish("$sunrise", tmpBuf, true);
+  mqttPublish("sunrise", tmpBuf, true);
 
   timeToTmpBuf(sunsetAfterMidnight);
-  mqttPublish("$sunset", tmpBuf, true);
+  mqttPublish("sunset", tmpBuf, true);
 }
 
 void publishPortionOfDay(const char* portion)
@@ -645,7 +650,7 @@ byte readI2CRegister(byte i2c_address, byte reg)
 int percent2LEDInt(int p)
 {
   //return ledCurve.exponential(p);
-  return(p * 2);
+  return(p * 2.55);
 }
 
 /*-------- NTP ----------*/
@@ -755,8 +760,14 @@ void timeOfDayAlarm()
   }
 
   // Uptime - wraps after 50 days or so
-  snprintf(tmpBuf, sizeof(tmpBuf), "%lu", millis() / 1000);
+  uint32ToTmpBuf(millis() / 1000);
   mqttPublish("$uptime", tmpBuf, true);
+
+  // Check for repeated MQTT failures, if so restart via the dog
+  if (mqttFailCount > MQTT_TX_FAIL_LIMIT)
+  {
+    while(1);  // Infinte loop so the watchdog will kick in
+  }
 }
 
 // Calculates todays sunrise and sunset and stores globally.
@@ -789,10 +800,18 @@ void sunriseSunsetAlarm()
   publishSunriseSunset();
 }
 
-// This populates the global tmpBuf
+// Helper functions to populate the global tmpBuf
 void timeToTmpBuf(uint16_t minsAfterMidnight)
 {
   snprintf(tmpBuf, sizeof(tmpBuf), "%02d:%02d", minsAfterMidnight / 60, minsAfterMidnight % 60);
+}
+void uint16ToTmpBuf(uint16_t value)
+{
+  snprintf(tmpBuf, sizeof(tmpBuf), "%d", value);
+}
+void uint32ToTmpBuf(uint32_t value)
+{
+  snprintf(tmpBuf, sizeof(tmpBuf), "%lu", value);
 }
 
 void printTime(byte hour, byte minute)
