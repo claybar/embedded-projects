@@ -77,8 +77,6 @@ frontstepsControllerSettings0_t specificSettings;
 
 // Used for short-term string building
 char tmpBuf[48];
-// Used to redirect stdout to the serial port
-//FILE serial_stdout;
 
 // Storage, will be set by onboard i2c device and DHCP
 byte mac[] = { 0, 0, 0, 0, 0, 0 };
@@ -107,18 +105,10 @@ int sunriseAfterMidnight, sunsetAfterMidnight;
 EthernetClient ethernet;
 EthernetUDP udp;
 PubSubClient mqtt(ethernet);
-//Curve ledCurve;
+Curve ledCurve;
 
 const int NTP_PACKET_SIZE = 48;
 IPAddress ntpIP(NTP_SERVER_IP);
-
-// Function that printf and related will use to print to the serial port
-/*
-int serial_putchar(char c, FILE* f) {
-    if (c == '\n') serial_putchar('\r', f);
-    return Serial.write(c) == 1? 0 : 1;
-}
-*/
 
 void setup()
 {
@@ -132,9 +122,6 @@ void setup()
   wdt_disable();
 
   Serial.begin(115200);
-  // Redirect stdout to the serial port helper
-  //fdev_setup_stream(&serial_stdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
-  //stdout = &serial_stdout;
 
   // initialise the SPI and i2c bus.
   SPI.begin();
@@ -464,6 +451,7 @@ void mqttPublish(const char* name, const char* payload, bool retained)
   char topic[64];
   snprintf(topic, sizeof(topic), "%s/%s/%s", commonSettings.mqttTopicBase, commonSettings.deviceName, name);
 
+  /*
   Serial.print(F("MQTT: "));
   Serial.print(topic);
   Serial.print(F(" "));
@@ -473,6 +461,7 @@ void mqttPublish(const char* name, const char* payload, bool retained)
     Serial.print(F(" (R)"));
   }
   Serial.println("");
+  */
 
   // publish to the MQTT broker
   boolean success = mqtt.publish(topic, payload, retained);
@@ -593,10 +582,10 @@ void publishConfigAndSettings()
   mqttPublish("$localip", tmpBuf, true);
 
   uint16ToTmpBuf(commonSettings.version);
-  mqttPublish("$commonsettingsversion", tmpBuf, true);
+  mqttPublish("$commonversion", tmpBuf, true);
 
   uint16ToTmpBuf(specificSettings.version);
-  mqttPublish("$specificsettingsversion", tmpBuf, true);
+  mqttPublish("$specificversion", tmpBuf, true);
 
   uint16ToTmpBuf(specificSettings.lightingAfterMotionTime / 1000);
   mqttPublish("lightsoffdelay", tmpBuf, true);
@@ -649,8 +638,8 @@ byte readI2CRegister(byte i2c_address, byte reg)
 // NO ERROR CHECKING - MUST BE 0-100
 int percent2LEDInt(int p)
 {
-  //return ledCurve.exponential(p);
-  return(p * 2.55);
+  // Quasi exponential curve which only calculates to nearest 5 of input
+  return ledCurve.quasiExp(p);
 }
 
 /*-------- NTP ----------*/
@@ -814,8 +803,10 @@ void uint32ToTmpBuf(uint32_t value)
   snprintf(tmpBuf, sizeof(tmpBuf), "%lu", value);
 }
 
+/*
 void printTime(byte hour, byte minute)
 {
+
   Serial.print(hour, DEC);
   Serial.print(F(":"));
   if(minute < 10)
@@ -845,3 +836,4 @@ void printDateTime(time_t t)
   Serial.print(F(" "));
   Serial.print(year(t));
 }
+*/
