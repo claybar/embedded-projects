@@ -136,8 +136,8 @@ void setup()
     /*
     strcpy(commonSettings.deviceName, "frontsteps");
     strcpy(commonSettings.mqttTopicBase, "devices");
-    strcpy(commonSettings.mqttWillTopic, "clients/frontsteps");
-    strcpy(commonSettings.mqttWillMessage, "unexpected exit");
+    strcpy(commonSettings.mqttWillTopic, "$online");
+    strcpy(commonSettings.mqttWillMessage, "false");
     EEPROM.updateBlock(ADDR_COM_SETTINGS_OFFSET, commonSettings);
     */
   }
@@ -399,7 +399,15 @@ void updateLights()
 
 boolean mqttConnect()
 {
-  boolean success = mqtt.connect(commonSettings.deviceName, MQTT_USERNAME, MQTT_PASSWORD, commonSettings.mqttWillTopic, mqttWillQos, mqttWillRetain, commonSettings.mqttWillMessage);
+  char willTopic[64];
+  snprintf(willTopic, sizeof(willTopic), "%s/%s/%s", commonSettings.mqttTopicBase, commonSettings.deviceName, commonSettings.mqttWillTopic);
+
+  boolean success = mqtt.connect(commonSettings.deviceName, MQTT_USERNAME, MQTT_PASSWORD, willTopic, mqttWillQos, mqttWillRetain, commonSettings.mqttWillMessage);
+
+  // publish retained LWT so anything listening knows we are alive
+  const byte data[] = { "true" };
+  mqtt.publish(willTopic, data, 4, mqttWillRetain);
+
   //Serial.print(F("MQTT: "));
   /*
   if (success)
