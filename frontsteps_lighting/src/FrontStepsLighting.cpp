@@ -1,4 +1,7 @@
 /*
+Philip Barclay
+26 July 2016
+
 Controller for the LED lights of my frontsteps.  Light output level determined by a
 combination of motion sensors and time of day.
 
@@ -7,33 +10,25 @@ Hardware consists of:
   - Custom shield with 2x motion IO interface
   - Single channel 12V mosfet driven light output
 
+Developed using platformio with additional libraries:
+  - elapsedMillis https://github.com/pfeerick/elapsedMillis/wiki
+  - Sunrise http://www.andregoncalves.info/ag_blog/?p=47
+  - Settings ../../libraries/settings
+
 There are four time periods defined each day, light output within each time state
 determined by the OR combination of the motion sense inputs:
 
-  - Night
-  - Morning
-  - Day
-  - Evening
+| portion-of-day   | motion (in) | lights (out) |
++------------------+-------------+--------------+
+| daytime          | dont care   | off          |
+| evening, morning | no          | ambient      |
+| evening, morning | yes         | bright       |
+| night            | no          | off          |
+| night            | yes         | bright       |
 
-
-
-Overall operation implemeted as a FSM.
-
-States:
-- Daytime (LEDs always off)
-- Dusk (LEDs on dimly)
-- Dawn (LEDs on dimly)
-- Night (LEDs off)
-- Motion (LEDs on bright)
-- Alarm (LEDs flashing)
-
-Transitions clock:
-Daytime -> Dusk
-Dusk -> Night
-Night -> Dawn
-Dawn -> Daytime
-
-Within states [Dusk, Night, Dawn] motion
+Timing of morning and evening time portions is determined by a fixed time for
+one limit, and a time relative to sunrise/set for the other.  E.g. morning could
+be defined as: start=0700 (7am), end=10min after sunrise.
 */
 
 #include <Arduino.h>
