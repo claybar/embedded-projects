@@ -560,11 +560,11 @@ void publishConfigAndSettings()
   snprintf(tmpBuf, sizeof(tmpBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   mqttPublish("$mac", tmpBuf, true);
   */
-  /*
+
   IPAddress ip = Ethernet.localIP();
   snprintf(tmpBuf, sizeof(tmpBuf), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
   mqttPublish("$localip", tmpBuf, true);
-*/
+  
   uint16ToTmpBuf(commonSettings.version);
   mqttPublish("$commonsettingsversion", tmpBuf, true);
 
