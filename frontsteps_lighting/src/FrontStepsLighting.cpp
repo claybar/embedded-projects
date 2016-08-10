@@ -244,14 +244,15 @@ void setup()
   motionTimer = 0;
 
   // Fire things once to get started
-  timeOfDayAlarm();
   sunriseSunsetAlarm();
+  timeOfDayAlarm();
   updateLights();
   publishConfigAndSettings();
 }
 
 void loop()
 {
+  // Always feed your dog
   wdt_reset();
 
   motionAState = digitalRead(MOTIONSENSORAPIN);
@@ -536,7 +537,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
   }
   else if (strcmp(topicStrip, "morningstart/set") == 0)
   {
-    specificSettings.morningStart = atoi(p);
+    specificSettings.morningStart = hourMinToMinAfterMidnight(atoi(p));
     updateRetained = true;
   }
   else if (strcmp(topicStrip, "morningaftersunrise/set") == 0)
@@ -551,7 +552,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
   }
   else if (strcmp(topicStrip, "eveningend/set") == 0)
   {
-    specificSettings.eveningEnd = atoi(p);
+    specificSettings.eveningEnd = hourMinToMinAfterMidnight(atoi(p));
     updateRetained = true;
   }
   else
@@ -596,7 +597,8 @@ void publishConfigAndSettings()
   uint16ToTmpBuf(specificSettings.lightingLevelAmbient);
   mqttPublish("lightsambient", tmpBuf, true);
 
-  uint16ToTmpBuf(specificSettings.morningStart);
+  //uint16ToTmpBuf(minAfterMidnightToHourMin(specificSettings.morningStart));
+  timeToTmpBuf(specificSettings.morningStart);
   mqttPublish("morningstart", tmpBuf, true);
 
   uint16ToTmpBuf(specificSettings.morningAfterSunrise);
@@ -605,7 +607,8 @@ void publishConfigAndSettings()
   uint16ToTmpBuf(specificSettings.eveningBeforeSunset);
   mqttPublish("beforesunset", tmpBuf, true);
 
-  uint16ToTmpBuf(specificSettings.eveningEnd);
+  //uint16ToTmpBuf(minAfterMidnightToHourMin(specificSettings.eveningEnd));
+  timeToTmpBuf(specificSettings.eveningEnd);
   mqttPublish("eveningend", tmpBuf, true);
 }
 
@@ -792,7 +795,7 @@ void sunriseSunsetAlarm()
 // Helper functions to populate the global tmpBuf
 void timeToTmpBuf(uint16_t minsAfterMidnight)
 {
-  snprintf(tmpBuf, sizeof(tmpBuf), "%02d:%02d", minsAfterMidnight / 60, minsAfterMidnight % 60);
+  snprintf(tmpBuf, sizeof(tmpBuf), "%02d%02d", minsAfterMidnight / 60, minsAfterMidnight % 60);
 }
 void uint16ToTmpBuf(uint16_t value)
 {
@@ -803,7 +806,11 @@ void uint32ToTmpBuf(uint32_t value)
   snprintf(tmpBuf, sizeof(tmpBuf), "%lu", value);
 }
 
-/*
+uint16_t hourMinToMinAfterMidnight(uint16_t t)
+{
+  return (t / 100) * 60 + (t % 100);
+}
+
 void printTime(byte hour, byte minute)
 {
 
@@ -836,4 +843,3 @@ void printDateTime(time_t t)
   Serial.print(F(" "));
   Serial.print(year(t));
 }
-*/

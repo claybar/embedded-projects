@@ -41,6 +41,9 @@ void timeToTmpBuf(uint16_t minsAfterMidnight);
 void uint16ToTmpBuf(uint16_t value);
 void uint32ToTmpBuf(uint32_t value);
 
+uint16_t hourMinToMinAfterMidnight(uint16_t t);
+//uint16_t minAfterMidnightToHourMin(uint16_t m);
+
 time_t getUtcFromNtp();
 void sendNTPpacket(IPAddress &address);
 
@@ -57,4 +60,3 @@ void mqttCallback(char* topic, byte* payload, unsigned int length);
 void publishConfigAndSettings();
 void publishSunriseSunset();
 void publishPortionOfDay(const char* portion);
-//void publishAllRetained();
