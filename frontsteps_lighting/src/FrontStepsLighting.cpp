@@ -572,25 +572,25 @@ void publishConfigAndSettings()
   mqttPublish("$specificsettingsversion", tmpBuf, true);
 
   uint16ToTmpBuf(specificSettings.lightingAfterMotionTime / 1000);
-  mqttPublish("$lightsoffdelay", tmpBuf, true);
+  mqttPublish("lightsoffdelay", tmpBuf, true);
 
   uint16ToTmpBuf(specificSettings.lightingLevelBright);
-  mqttPublish("$lightsbright", tmpBuf, true);
+  mqttPublish("lightsbright", tmpBuf, true);
 
   uint16ToTmpBuf(specificSettings.lightingLevelAmbient);
-  mqttPublish("$lightsambient", tmpBuf, true);
+  mqttPublish("lightsambient", tmpBuf, true);
 
   uint16ToTmpBuf(specificSettings.morningStart);
-  mqttPublish("$morningstart", tmpBuf, true);
+  mqttPublish("morningstart", tmpBuf, true);
 
   uint16ToTmpBuf(specificSettings.morningAfterSunrise);
-  mqttPublish("$aftersunrise", tmpBuf, true);
+  mqttPublish("aftersunrise", tmpBuf, true);
 
   uint16ToTmpBuf(specificSettings.eveningBeforeSunset);
-  mqttPublish("$beforesunset", tmpBuf, true);
+  mqttPublish("beforesunset", tmpBuf, true);
 
   uint16ToTmpBuf(specificSettings.eveningEnd);
-  mqttPublish("$eveningend", tmpBuf, true);
+  mqttPublish("eveningend", tmpBuf, true);
 }
 
 void publishSunriseSunset()
@@ -780,7 +780,6 @@ void uint32ToTmpBuf(uint32_t value)
 {
   snprintf(tmpBuf, sizeof(tmpBuf), "%lu", value);
 }
-
 
 void printTime(byte hour, byte minute)
 {
