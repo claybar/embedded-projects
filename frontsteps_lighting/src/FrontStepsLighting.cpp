@@ -1,4 +1,22 @@
 /*
+Controller for the LED lights of my frontsteps.  Light output level determined by a
+combination of motion sensors and time of day.
+
+Hardware consists of:
+  - Freetronics Etherten (Uno with built in ethernet controller)
+  - Custom shield with 2x motion IO interface
+  - Single channel 12V mosfet driven light output
+
+There are four time periods defined each day, light output within each time state
+determined by the OR combination of the motion sense inputs:
+
+  - Night
+  - Morning
+  - Day
+  - Evening
+
+
+
 Overall operation implemeted as a FSM.
 
 States:
@@ -20,23 +38,21 @@ Within states [Dusk, Night, Dawn] motion
 
 #include <Arduino.h>
 #include <avr/wdt.h>
-#include <EtherTen.h>
-#include <SPI.h>
-#include <Wire.h>
+
+#include <EEPROMex.h>
+#include <elapsedMillis.h>
 #include <Ethernet.h>
 #include <PubSubClient.h>
-//#include <LEDFader.h>
+#include <SPI.h>
+#include <Sunrise.h>
 #include <TimeLib.h>
 #include <TimeAlarms.h>
-//#include <TimeLord.h>
-#include <Curve.h>
-#include <elapsedMillis.h>
-#include <EEPROMex.h>
 #include <Timezone.h>
-#include <Sunrise.h>
+#include <Wire.h>
 
-#include <Settings.h>
+#include <EtherTen.h>
 #include <Secrets.h>
+#include <Settings.h>
 
 #include "FrontStepsLighting.h"
 #include "Curve.h"
@@ -626,7 +642,7 @@ byte readI2CRegister(byte i2c_address, byte reg)
 int percent2LEDInt(int p)
 {
   //return ledCurve.exponential(p);
-  return(p * 2);
+  return(p * 2.55);
 }
 
 /*-------- NTP ----------*/
