@@ -1,29 +1,49 @@
 #include <Wire.h>
+#include <Math.h>
 #include <Homie.h>
 #include <Adafruit_ADS1015.h>
 #include <Adafruit_HTU21DF.h>
 
-#define FW_NAME "hwmonitor"
-#define FW_VERSION "0.0.1"
+#include "thermistor.h"
 
-#define ADCCH_TOP 0
-#define ADCCH_MIDDLE 1
-#define ADCCH_BOTTOM 2
-#define ADCCH_COLLECTOR 3
+#define FW_NAME             "hwmonitor"
+#define FW_VERSION          "0.0.2"
+
+#define ADCCH_TOP           0
+#define ADCCH_MIDDLE        1
+#define ADCCH_BOTTOM        2
+#define ADCCH_COLLECTOR     3
+
+#define ADS_GAIN            (GAIN_ONE)
+#define ADS_VOLTS_PER_BIT   0.002  // 1x gain   1 bit = 2mV
+#define THERM_SUPPLY        5.0
+#define THERM_RDIV_1        10000.0
 
 Adafruit_ADS1015 ads;
 Adafruit_HTU21DF htu = Adafruit_HTU21DF();
 
 HomieNode cylinderNode("hotwaterCylinder", "hwcylinder");
 HomieNode collectorNode("solarCollector", "solarcollector");
-HomieNode cupboardNode("cupboard", "temperature,humidity");  // ID, type
-
-//HomieNode cylinderNode("cylinder", "temperature");  // ID, type
-//HomieNode collectorNode("collector", "temperature");  // ID, type
+HomieNode cupboardNode("cupboard", "temperature,humidity");
 
 const int TRANSMIT_INTERVAL = 10;
 unsigned long lastDataSent = 0;
-//float temperature = 1.0;
+
+void homieSetupHandler()
+{
+  collectorNode.advertise("raw");
+  //collectorNode.advertise("temperature");
+
+  cylinderNode.advertise("rawTop");
+  cylinderNode.advertise("rawMiddle");
+  cylinderNode.advertise("rawBottom");
+  cylinderNode.advertise("temperatureTop");
+  cylinderNode.advertise("temperatureMiddle");
+  cylinderNode.advertise("temperatureBottom");
+
+  cupboardNode.advertise("temperature");
+  cupboardNode.advertise("humidity");
+}
 
 void homieLoopHandler()
 {
@@ -35,53 +55,68 @@ void homieLoopHandler()
     uint16_t midAdc = ads.readADC_SingleEnded(ADCCH_MIDDLE);
     uint16_t botAdc = ads.readADC_SingleEnded(ADCCH_BOTTOM);
 
-    Homie.setNodeProperty(collectorNode, "raw", String(collAdc), true);
+    double topTemp = thermistor10k(topAdc * ADS_VOLTS_PER_BIT, THERM_SUPPLY, THERM_RDIV_1);
+    double midTemp = thermistor10k(midAdc * ADS_VOLTS_PER_BIT, THERM_SUPPLY, THERM_RDIV_1);
+    double botTemp = thermistor10k(botAdc * ADS_VOLTS_PER_BIT, THERM_SUPPLY, THERM_RDIV_1);
 
-    Homie.setNodeProperty(collectorNode, "temperature", String(collAdc), true);
+    /*
+    Serial.println("midAdc " + String(midAdc));
+    Serial.println("midVolts " + String(midAdc * ADS_VOLTS_PER_BIT));
+    Serial.println("midTemp " + String(midTemp));
+    */
 
+    Homie.setNodeProperty(collectorNode, "raw").send(String(collAdc));
+    //Homie.setNodeProperty(collectorNode, "temperature").send(String(collAdc));
 
-    Homie.setNodeProperty(cylinderNode, "rawTop", String(topAdc), true);
-    Homie.setNodeProperty(cylinderNode, "rawMiddle", String(midAdc), true);
-    Homie.setNodeProperty(cylinderNode, "rawBottom", String(botAdc), true);
+    Homie.setNodeProperty(cylinderNode, "rawTop").send(String(topAdc));
+    Homie.setNodeProperty(cylinderNode, "rawMiddle").send(String(midAdc));
+    Homie.setNodeProperty(cylinderNode, "rawBottom").send(String(botAdc));
+    Homie.setNodeProperty(cylinderNode, "temperatureTop").send(String(topTemp));
+    Homie.setNodeProperty(cylinderNode, "temperatureMiddle").send(String(midTemp));
+    Homie.setNodeProperty(cylinderNode, "temperatureBottom").send(String(botTemp));
 
-    Homie.setNodeProperty(cylinderNode, "temperatureTop", String(topAdc), true);
-    Homie.setNodeProperty(cylinderNode, "temperatureMiddle", String(midAdc), true);
-    Homie.setNodeProperty(cylinderNode, "temperatureBottom", String(botAdc), true);
-
-    Homie.setNodeProperty(cupboardNode, "temperature", String(htu.readTemperature()), true);
-    Homie.setNodeProperty(cupboardNode, "humidity", String(htu.readHumidity()), true);
+    Homie.setNodeProperty(cupboardNode, "temperature").send(String(htu.readTemperature()));
+    Homie.setNodeProperty(cupboardNode, "humidity").send(String(htu.readHumidity()));
 
     lastDataSent += TRANSMIT_INTERVAL * 1000UL;
   }
 }
 
-void onHomieEvent(HomieEvent event) {
-  Serial.print("EVENT: ");
-  Serial.println(event);
-
+void onHomieEvent(HomieEvent event)
+{
   switch(event)
   {
-    case HOMIE_CONFIGURATION_MODE:
+    case HomieEvent::STANDALONE_MODE:
+      // Do whatever you want when standalone mode is started
       break;
-    case HOMIE_NORMAL_MODE:
-       // Do whatever you want when normal mode is started
+    case HomieEvent::CONFIGURATION_MODE:
+      // Do whatever you want when configuration mode is started
       break;
-    case HOMIE_OTA_MODE:
-       // Do whatever you want when OTA mode is started
+    case HomieEvent::NORMAL_MODE:
+      // Do whatever you want when normal mode is started
       break;
-    case HOMIE_ABOUT_TO_RESET:
+    case HomieEvent::OTA_STARTED:
+      // Do whatever you want when OTA is started
+      break;
+    case HomieEvent::OTA_FAILED:
+      // Do whatever you want when OTA is failed
+      break;
+    case HomieEvent::OTA_SUCCESSFUL:
+      // Do whatever you want when OTA is successful
+      break;
+    case HomieEvent::ABOUT_TO_RESET:
       // Do whatever you want when the device is about to reset
       break;
-    case HOMIE_WIFI_CONNECTED:
-       // Do whatever you want when Wi-Fi is connected in normal mode
+    case HomieEvent::WIFI_CONNECTED:
+      // Do whatever you want when Wi-Fi is connected in normal mode
       break;
-    case HOMIE_WIFI_DISCONNECTED:
+    case HomieEvent::WIFI_DISCONNECTED:
       // Do whatever you want when Wi-Fi is disconnected in normal mode
       break;
-    case HOMIE_MQTT_CONNECTED:
+    case HomieEvent::MQTT_CONNECTED:
       // Do whatever you want when MQTT is connected in normal mode
       break;
-    case HOMIE_MQTT_DISCONNECTED:
+    case HomieEvent::MQTT_DISCONNECTED:
       // Do whatever you want when MQTT is disconnected in normal mode
       break;
   }
@@ -102,31 +137,26 @@ void setup()
   ESP.getFlashChipSpeed(void) returns the flash chip frequency, in Hz.
   */
 
+  Wire.begin(D2, D1);  // SDA=D2=GPIO4 SCL=D1=GPIO5
+
   Serial.begin(115200);
   Serial.println();
   Serial.println();
 
-  Wire.begin(D2, D1);  // SDA=D2=GPIO4 SCL=D1=GPIO5
 
-  ads.setGain(GAIN_ONE);        // 1x gain   1 bit = 2mV
+  ads.setGain(ADS_GAIN);
   ads.begin();
 
   if (!htu.begin())
   {
-    Serial.println("Couldn't find HTU21D sensor!");
+    Serial.println(F("Couldn't find HTU21D sensor!"));
   }
 
-  Homie.setFirmware(FW_NAME, FW_VERSION);
+  Homie_setFirmware(FW_NAME, FW_VERSION);
 
-  Homie.onEvent(onHomieEvent);
-
-
-  Homie.registerNode(cylinderNode);
-  Homie.registerNode(collectorNode);
-  Homie.registerNode(cupboardNode);
-
-  //Homie.setSetupFunction(homieSetupHandler);
+  Homie.setSetupFunction(homieSetupHandler);
   Homie.setLoopFunction(homieLoopHandler);
+  Homie.onEvent(onHomieEvent);
 
   /*
   Serial.println("Flash chip stats:");
