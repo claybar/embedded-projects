@@ -9,13 +9,14 @@
 #define FW_NAME             "hwmonitor"
 #define FW_VERSION          "0.0.2"
 
-#define ADCCH_TOP           0
-#define ADCCH_MIDDLE        1
-#define ADCCH_BOTTOM        2
-#define ADCCH_COLLECTOR     3
+#define ADCCH_TOP           0 // Blue
+#define ADCCH_MIDDLE        1 // Orange
+#define ADCCH_BOTTOM        2 // Green
+#define ADCCH_COLLECTOR     3 // Brown
 
-#define ADS_GAIN            (GAIN_ONE)
-#define ADS_VOLTS_PER_BIT   0.002  // 1x gain   1 bit = 2mV
+#define ADS_GAIN            (GAIN_TWOTHIRDS)
+#define ADS_VOLTS_PER_BIT   0.003  // 2/3x gain   1 bit = 3mV
+//#define ADS_VOLTS_PER_BIT   0.002  // 1x gain   1 bit = 2mV
 #define THERM_SUPPLY        5.0
 #define THERM_RDIV_1        10000.0
 
@@ -26,11 +27,17 @@ HomieNode cylinderNode("hotwaterCylinder", "hwcylinder");
 HomieNode collectorNode("solarCollector", "solarcollector");
 HomieNode cupboardNode("cupboard", "temperature,humidity");
 
-const int TRANSMIT_INTERVAL = 10;
+HomieSetting<unsigned long> transmitIntervalSetting("measurementInterval", "The measurement interval in seconds");
+
+const int DEFAULT_TRANSMIT_INTERVAL = 60;
 unsigned long lastDataSent = 0;
+
+bool tempHumSensor = false;
 
 void homieSetupHandler()
 {
+  transmitIntervalSetting.setDefaultValue(DEFAULT_TRANSMIT_INTERVAL);
+
   collectorNode.advertise("raw");
   //collectorNode.advertise("temperature");
 
@@ -41,13 +48,16 @@ void homieSetupHandler()
   cylinderNode.advertise("temperatureMiddle");
   cylinderNode.advertise("temperatureBottom");
 
-  cupboardNode.advertise("temperature");
-  cupboardNode.advertise("humidity");
+  if (tempHumSensor)
+  {
+    cupboardNode.advertise("temperature");
+    cupboardNode.advertise("humidity");
+  }
 }
 
 void homieLoopHandler()
 {
-  if (millis() - lastDataSent >= TRANSMIT_INTERVAL * 1000UL)
+  if (millis() - lastDataSent >= transmitIntervalSetting.get() * 1000UL || lastDataSent == 0)
   {
     uint16_t collAdc = ads.readADC_SingleEnded(ADCCH_COLLECTOR);
 
@@ -75,49 +85,45 @@ void homieLoopHandler()
     Homie.setNodeProperty(cylinderNode, "temperatureMiddle").send(String(midTemp));
     Homie.setNodeProperty(cylinderNode, "temperatureBottom").send(String(botTemp));
 
-    Homie.setNodeProperty(cupboardNode, "temperature").send(String(htu.readTemperature()));
-    Homie.setNodeProperty(cupboardNode, "humidity").send(String(htu.readHumidity()));
+    if (tempHumSensor)
+    {
+      Homie.setNodeProperty(cupboardNode, "temperature").send(String(htu.readTemperature()));
+      Homie.setNodeProperty(cupboardNode, "humidity").send(String(htu.readHumidity()));
+    }
 
-    lastDataSent += TRANSMIT_INTERVAL * 1000UL;
+    lastDataSent += transmitIntervalSetting.get() * 1000UL;
   }
 }
 
-void onHomieEvent(HomieEvent event)
+void onHomieEvent(const HomieEvent& event)
 {
-  switch(event)
+  switch(event.type)
   {
-    case HomieEvent::STANDALONE_MODE:
-      // Do whatever you want when standalone mode is started
+    case HomieEventType::STANDALONE_MODE:
       break;
-    case HomieEvent::CONFIGURATION_MODE:
-      // Do whatever you want when configuration mode is started
+    case HomieEventType::CONFIGURATION_MODE:
       break;
-    case HomieEvent::NORMAL_MODE:
-      // Do whatever you want when normal mode is started
+    case HomieEventType::NORMAL_MODE:
       break;
-    case HomieEvent::OTA_STARTED:
-      // Do whatever you want when OTA is started
+    case HomieEventType::OTA_STARTED:
       break;
-    case HomieEvent::OTA_FAILED:
-      // Do whatever you want when OTA is failed
+    case HomieEventType::OTA_FAILED:
       break;
-    case HomieEvent::OTA_SUCCESSFUL:
-      // Do whatever you want when OTA is successful
+    case HomieEventType::OTA_SUCCESSFUL:
       break;
-    case HomieEvent::ABOUT_TO_RESET:
-      // Do whatever you want when the device is about to reset
+    case HomieEventType::ABOUT_TO_RESET:
       break;
-    case HomieEvent::WIFI_CONNECTED:
-      // Do whatever you want when Wi-Fi is connected in normal mode
+    case HomieEventType::WIFI_CONNECTED:
       break;
-    case HomieEvent::WIFI_DISCONNECTED:
-      // Do whatever you want when Wi-Fi is disconnected in normal mode
+    case HomieEventType::WIFI_DISCONNECTED:
       break;
-    case HomieEvent::MQTT_CONNECTED:
-      // Do whatever you want when MQTT is connected in normal mode
+    case HomieEventType::MQTT_CONNECTED:
       break;
-    case HomieEvent::MQTT_DISCONNECTED:
-      // Do whatever you want when MQTT is disconnected in normal mode
+    case HomieEventType::MQTT_DISCONNECTED:
+      break;
+    case HomieEventType::MQTT_PACKET_ACKNOWLEDGED:
+      break;
+    case HomieEventType::READY_TO_SLEEP:
       break;
   }
 }
@@ -143,17 +149,23 @@ void setup()
   Serial.println();
   Serial.println();
 
-
   ads.setGain(ADS_GAIN);
   ads.begin();
 
   if (!htu.begin())
   {
     Serial.println(F("Couldn't find HTU21D sensor!"));
+    tempHumSensor = false;
+  }
+  else
+  {
+    tempHumSensor = true;
   }
 
   Homie_setFirmware(FW_NAME, FW_VERSION);
 
+  Homie.disableResetTrigger();
+  Homie.setLedPin(D3, LOW);
   Homie.setSetupFunction(homieSetupHandler);
   Homie.setLoopFunction(homieLoopHandler);
   Homie.onEvent(onHomieEvent);
