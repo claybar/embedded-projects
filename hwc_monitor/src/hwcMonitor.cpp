@@ -27,7 +27,7 @@ HomieNode cylinderNode("hotwaterCylinder", "hwcylinder");
 HomieNode collectorNode("solarCollector", "solarcollector");
 HomieNode cupboardNode("cupboard", "temperature,humidity");
 
-HomieSetting<unsigned long> transmitIntervalSetting("measurementInterval", "The measurement interval in seconds");
+HomieSetting<long> transmitIntervalSetting("measurementInterval", "The measurement interval in seconds");
 
 const int DEFAULT_TRANSMIT_INTERVAL = 60;
 unsigned long lastDataSent = 0;
@@ -75,20 +75,20 @@ void homieLoopHandler()
     Serial.println("midTemp " + String(midTemp));
     */
 
-    Homie.setNodeProperty(collectorNode, "raw").send(String(collAdc));
-    //Homie.setNodeProperty(collectorNode, "temperature").send(String(collAdc));
+    collectorNode.setProperty("raw").send(String(collAdc));
+    //collectorNode.setProperty("temperature").send(String(collAdc));
 
-    Homie.setNodeProperty(cylinderNode, "rawTop").send(String(topAdc));
-    Homie.setNodeProperty(cylinderNode, "rawMiddle").send(String(midAdc));
-    Homie.setNodeProperty(cylinderNode, "rawBottom").send(String(botAdc));
-    Homie.setNodeProperty(cylinderNode, "temperatureTop").send(String(topTemp));
-    Homie.setNodeProperty(cylinderNode, "temperatureMiddle").send(String(midTemp));
-    Homie.setNodeProperty(cylinderNode, "temperatureBottom").send(String(botTemp));
+    cylinderNode.setProperty("rawTop").send(String(topAdc));
+    cylinderNode.setProperty("rawMiddle").send(String(midAdc));
+    cylinderNode.setProperty("rawBottom").send(String(botAdc));
+    cylinderNode.setProperty("temperatureTop").send(String(topTemp));
+    cylinderNode.setProperty("temperatureMiddle").send(String(midTemp));
+    cylinderNode.setProperty("temperatureBottom").send(String(botTemp));
 
     if (tempHumSensor)
     {
-      Homie.setNodeProperty(cupboardNode, "temperature").send(String(htu.readTemperature()));
-      Homie.setNodeProperty(cupboardNode, "humidity").send(String(htu.readHumidity()));
+      cupboardNode.setProperty("temperature").send(String(htu.readTemperature()));
+      cupboardNode.setProperty("humidity").send(String(htu.readHumidity()));
     }
 
     lastDataSent += transmitIntervalSetting.get() * 1000UL;
